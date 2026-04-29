@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+vendor/
+.venv/
+__pycache__/
+*.pyc
+
+# Build outputs
+dist/
+build/
+out/
+*.egg-info/
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Environment / Secrets — never commit these
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs
+*.log
+logs/
+
+# Coverage / Test artifacts
+coverage/
+.nyc_output/
+htmlcov/
+.coverage
+*.lcov
+
+# OS artifacts
+.DS_Store
+Desktop.ini

@@ -1,0 +1,93 @@
+# CI — Lint, Test, Build
+#
+# Runs on every pull request and push to main.
+# All third-party actions MUST be pinned to full commit SHAs (§4.4).
+#
+# TODO: Before publishing, verify all action SHAs are current:
+#   gh api repos/actions/checkout/git/ref/tags/v4 --jq '.object.sha'
+#   gh api repos/actions/setup-node/git/ref/tags/v4 --jq '.object.sha'
+#   (repeat for each action)
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Default: read-only GITHUB_TOKEN (§4.4)
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      # TODO: Uncomment and configure for your language/runtime.
+      # - name: Setup Node.js
+      #   uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+      #   with:
+      #     node-version-file: '.nvmrc'
+      #     cache: 'npm'
+
+      # - name: Install dependencies
+      #   run: npm ci
+
+      # - name: Lint
+      #   run: npm run lint
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      # TODO: Configure test steps for your project.
+      # - name: Setup Node.js
+      #   uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+      #   with:
+      #     node-version-file: '.nvmrc'
+      #     cache: 'npm'
+
+      # - name: Install dependencies
+      #   run: npm ci
+
+      # - name: Test
+      #   run: npm test
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      # TODO: Configure build steps for your project.
+      # - name: Setup Node.js
+      #   uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+      #   with:
+      #     node-version-file: '.nvmrc'
+      #     cache: 'npm'
+
+      # - name: Install dependencies
+      #   run: npm ci
+
+      # - name: Build
+      #   run: npm run build

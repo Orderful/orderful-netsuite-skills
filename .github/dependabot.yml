@@ -1,0 +1,35 @@
+# Dependabot configuration
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+
+updates:
+  # GitHub Actions — pin actions to SHAs, so Dependabot watches for new versions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "ci"
+
+  # TODO: Uncomment and configure the ecosystem(s) used by this project.
+  # Common options: npm, pip, docker, gomod, cargo, maven, nuget, bundler
+
+  # - package-ecosystem: "npm"
+  #   directory: "/"
+  #   schedule:
+  #     interval: "weekly"
+  #     day: "monday"
+  #   groups:
+  #     production-deps:
+  #       dependency-type: "production"
+  #     dev-deps:
+  #       dependency-type: "development"
+  #   commit-message:
+  #     prefix: "deps"
+  #   open-pull-requests-limit: 10

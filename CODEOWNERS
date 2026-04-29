@@ -1,0 +1,20 @@
+# CODEOWNERS — defines required reviewers for pull requests.
+#
+# Each line is a file pattern followed by one or more owners.
+# Order matters — later patterns take precedence.
+# Owners must be @org/team-name or @username.
+#
+# Reference: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# TODO: Replace REPO_NAME and add team members before publishing.
+# The maintainer team must have at least 2 humans (per runbook §3.4 / §5.3).
+
+# Default owners for everything in the repo
+*       @orderful/REPO_NAME-maintainers
+
+# CI / GitHub Actions workflows — require security review
+/.github/workflows/     @orderful/REPO_NAME-maintainers @orderful/cybersecurity
+
+# Security-sensitive files
+/SECURITY.md            @orderful/cybersecurity
+/LICENSE                @orderful/REPO_NAME-maintainers @orderful/cybersecurity
