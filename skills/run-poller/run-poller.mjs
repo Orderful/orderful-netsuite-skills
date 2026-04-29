@@ -83,8 +83,19 @@ const requestData = { url, method: 'GET' };
 const authHeader = oauth.toHeader(oauth.authorize(requestData, token));
 authHeader.Authorization += `, realm="${accountId}"`;
 
-const res = await fetch(url, { method: 'GET', headers: { ...authHeader } });
-const text = await res.text();
+let res;
+let text;
+try {
+  res = await fetch(url, { method: 'GET', headers: { ...authHeader } });
+  text = await res.text();
+} catch (error) {
+  console.error('FAIL: Unable to call the run-poller RESTlet.');
+  console.error(`URL: ${url}`);
+  console.error(
+    `Request error: ${error instanceof Error ? error.message : String(error)}`,
+  );
+  process.exit(1);
+}
 let body;
 try {
   body = JSON.parse(text);
