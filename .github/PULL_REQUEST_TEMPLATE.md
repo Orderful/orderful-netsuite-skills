@@ -2,8 +2,6 @@
 
 <!-- What does this PR do? Link to any related issues. -->
 
-Closes #
-
 ## Changes
 
 <!-- Describe the changes made. -->
