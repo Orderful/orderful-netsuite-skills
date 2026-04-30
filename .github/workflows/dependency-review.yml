@@ -27,7 +27,7 @@ jobs:
         uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
         with:
           # Block PRs that introduce dependencies with these licenses (§3.2)
-          deny-licenses: GPL-2.0-only, GPL-3.0-only, AGPL-3.0-only, SSPL-1.0, BSL-1.1
+          deny-licenses: GPL-2.0-only, GPL-3.0-only, AGPL-3.0-only, SSPL-1.0, BUSL-1.1
           # Fail on vulnerabilities rated high or critical
           fail-on-severity: high
           comment-summary-in-pr: always

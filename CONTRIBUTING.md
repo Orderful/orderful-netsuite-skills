@@ -2,22 +2,6 @@
 
 Thank you for your interest in contributing! This document explains how to get involved.
 
-## Developer Certificate of Origin (DCO)
-
-This project uses the [Developer Certificate of Origin](https://developercertificate.org/) (DCO) to ensure that contributors have the right to submit their work. Every commit must be signed off:
-
-```bash
-git commit -s -m "Your commit message"
-```
-
-This adds a `Signed-off-by: Your Name <your.email@example.com>` trailer to your commit message, certifying that you wrote the code or have the right to submit it under the project's license. Unsigned commits will be blocked by CI.
-
-If you forget to sign off, you can amend:
-
-```bash
-git commit --amend -s --no-edit
-```
-
 ## When to contribute
 
 - **You used a skill, it almost worked but had a gap** → open a PR with your refinement (a clearer step, a better SuiteQL, a missing edge case in the behaviour rules)

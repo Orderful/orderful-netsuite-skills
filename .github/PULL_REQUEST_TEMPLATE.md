@@ -22,4 +22,3 @@ Closes #
 - [ ] Self-review completed
 - [ ] Documentation updated (if applicable)
 - [ ] No secrets, PII, or internal references introduced
-- [ ] Commits are signed off (`git commit -s`) per DCO
