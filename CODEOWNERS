@@ -10,8 +10,8 @@
 *       @orderful/orderful-netsuite-skills-maintainers
 
 # CI / GitHub Actions workflows — require security review
-/.github/workflows/     @orderful/orderful-netsuite-skills-maintainers @orderful/cybersecurity
+/.github/workflows/     @orderful/orderful-netsuite-skills-maintainers @orderful/devsecops
 
 # Security-sensitive files
-/SECURITY.md            @orderful/cybersecurity
-/LICENSE                @orderful/orderful-netsuite-skills-maintainers @orderful/cybersecurity
+/SECURITY.md            @orderful/devsecops
+/LICENSE                @orderful/orderful-netsuite-skills-maintainers @orderful/devsecops

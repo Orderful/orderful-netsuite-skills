@@ -134,8 +134,6 @@ Link to relevant `reference/*.md` files Claude should consult.
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-All commits must be signed off in compliance with the [Developer Certificate of Origin (DCO)](https://developercertificate.org/). Use `git commit -s` to sign your commits.
-
 ## Security
 
 If you discover a security vulnerability, please follow the process outlined in [SECURITY.md](SECURITY.md). **Do not open a public issue for security vulnerabilities.**
