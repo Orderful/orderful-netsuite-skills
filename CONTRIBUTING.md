@@ -1,6 +1,4 @@
-# Contributing to PROJECT_NAME
-
-<!-- TODO: Replace PROJECT_NAME throughout this file -->
+# Contributing to orderful-netsuite-skills
 
 Thank you for your interest in contributing! This document explains how to get involved.
 
@@ -20,11 +18,19 @@ If you forget to sign off, you can amend:
 git commit --amend -s --no-edit
 ```
 
+## When to contribute
+
+- **You used a skill, it almost worked but had a gap** → open a PR with your refinement (a clearer step, a better SuiteQL, a missing edge case in the behaviour rules)
+- **You handled a recurring task that nobody had a skill for yet** → open a PR with a new skill folder
+- **Reference material is wrong or stale** → edit `reference/*.md`
+- **Setup instructions tripped you up** → fix `README.md` so the next person doesn't hit the same thing
+
+
 ## How to Contribute
 
 ### Reporting Bugs
 
-1. Check [existing issues](https://github.com/orderful/PROJECT_NAME/issues) to avoid duplicates.
+1. Check [existing issues](https://github.com/orderful/orderful-netsuite-skills/issues) to avoid duplicates.
 2. Open a new issue using the **Bug Report** template.
 3. Include steps to reproduce, expected behavior, actual behavior, and environment details.
 
@@ -37,10 +43,10 @@ git commit --amend -s --no-edit
 
 1. Fork the repository and create your branch from `main`.
 2. Write clear, focused commits — one logical change per commit.
-3. Add or update tests for your changes.
+3. Add or update tests for your changes if applicable.
 4. Ensure all checks pass locally before pushing:
    ```bash
-   # TODO: Add lint/test/build commands specific to this project
+   npm install && npm run lint
    ```
 5. Open a pull request against `main`.
 6. Fill out the PR template completely.
@@ -58,10 +64,9 @@ git commit --amend -s --no-edit
 - Use descriptive branch names: `fix/issue-123-null-check`, `feat/add-retry-logic`, etc.
 
 ## Code Style
-
-<!-- TODO: Document code style expectations, linters, formatters used -->
+ESLint enforces style; run npm run lint before pushing.
 
 ## Getting Help
 
-- Open a [Discussion](https://github.com/orderful/PROJECT_NAME/discussions) for questions (if enabled).
+- Open a [Discussion](https://github.com/orderful/orderful-netsuite-skills/discussions) for questions (if enabled).
 - For security issues, see [SECURITY.md](SECURITY.md).

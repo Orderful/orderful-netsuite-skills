@@ -2,9 +2,6 @@
 #
 # Verifies all commits in a PR have a valid Signed-off-by trailer.
 # Required by §3.3 — contributors certify their right to submit via `git commit -s`.
-#
-# TODO: Before publishing, verify action SHA is current:
-#   gh api repos/probot/dco/git/ref/tags/v2 --jq '.object.sha'
 
 name: DCO
 

@@ -17,19 +17,16 @@ updates:
     commit-message:
       prefix: "ci"
 
-  # TODO: Uncomment and configure the ecosystem(s) used by this project.
-  # Common options: npm, pip, docker, gomod, cargo, maven, nuget, bundler
-
-  # - package-ecosystem: "npm"
-  #   directory: "/"
-  #   schedule:
-  #     interval: "weekly"
-  #     day: "monday"
-  #   groups:
-  #     production-deps:
-  #       dependency-type: "production"
-  #     dev-deps:
-  #       dependency-type: "development"
-  #   commit-message:
-  #     prefix: "deps"
-  #   open-pull-requests-limit: 10
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      production-deps:
+        dependency-type: "production"
+      dev-deps:
+        dependency-type: "development"
+    commit-message:
+      prefix: "deps"
+    open-pull-requests-limit: 10

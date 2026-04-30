@@ -1,58 +1,134 @@
-# PROJECT_NAME
+# Orderful NetSuite Skills
 
-<!-- TODO: Replace PROJECT_NAME throughout this file -->
-<!-- TODO: Add shields/badges as appropriate (CI status, npm version, license, etc.) -->
-
-> Brief one-line description of what this project does and why it exists.
+AI-powered skills for NetSuite integration work, designed for Orderful contractors, OAs, and tech-savvy NS admins working through Claude Code.
 
 ## Overview
 
-<!-- TODO: Write 2-3 paragraphs describing the project for an external audience.
-     No internal jargon, no Slack links, no Confluence links. -->
+A growing library of markdown skills that teach Claude Code how to:
+
+- Onboard a new NetSuite customer end-to-end (credentials, validation, enabling transactions)
+- Diagnose and fix common EDI failures (missing item lookups, stuck 850s)
+- Query NetSuite records using domain-appropriate conventions
+- Cross-reference Orderful-side transaction context with NetSuite state
+- Propose well-scoped fixes that you approve before they run
+
+Skills cite shared reference material (record types, common queries, REST patterns) so Claude has the right context without you having to paste it on every session.
 
 ## Getting Started
 
 ### Prerequisites
 
-<!-- TODO: List required tools, runtimes, and minimum versions -->
-
-### Installation
-
-```bash
-# TODO: Add installation instructions
-```
+1. Install [Claude Code](https://www.anthropic.com/claude-code) and sign in with your work account.
+2. Install **Node.js 20 LTS or newer** — required by the validation script and `samples/`.
+   - macOS (Homebrew): `brew install node`
+   - macOS / Linux (nvm): `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash && nvm install --lts`
+   - Windows: download the LTS installer from [nodejs.org](https://nodejs.org/)
+   - Verify with `node --version` (should print `v20.x` or higher).
+3. **Git** — to clone this repo.
 
 ### Quick Start
 
-```bash
-# TODO: Add a minimal usage example
-```
+1. Clone this repo:
+   ```bash
+   git clone git@github.com:Orderful/orderful-netsuite-skills.git 
+   cd orderful-netsuite-skills
+   ```
+2. Run the installer:
+   ```bash
+   ./install.sh
+   ```
+   This:
+   - symlinks each skill into `~/.claude/skills/` (Claude Code auto-discovers them via frontmatter)
+   - runs `npm install` for the validation script + `samples/`
+   - creates `~/orderful-onboarding/` for per-customer credentials
+3. Open Claude Code anywhere and run `/netsuite-setup`. The skill walks you through scaffolding `~/orderful-onboarding/<customer-slug>/.env` and validating both NetSuite and Orderful credentials. Repeat per customer.
 
-## Usage
-
-<!-- TODO: Expand with detailed usage, configuration options, examples -->
 
 ## Development
 
-### Setup
+### How to add a new skill
 
-```bash
-git clone https://github.com/orderful/PROJECT_NAME.git
-cd PROJECT_NAME
-# TODO: Add local development setup steps
+1. Create a folder under `skills/`:
+   ```bash
+   mkdir skills/your-skill-name
+   ```
+2. Add a `SKILL.md` (see structure below).
+3. (Optional) Add `examples.md` with annotated worked examples.
+4. Run `./install.sh` — symlinks pick up the new skill.
+5. Test it in a real Claude Code session against a real customer (or the sandbox).
+6. Open a PR with:
+   - The skill files
+   - A short PR description: what problem the skill solves, where you tested it, sample triggers ("the user says X")
+
+### Skill structure
+
+A `SKILL.md` is a markdown file with frontmatter + procedure + behaviour rules:
+
+```markdown
+---
+name: your-skill-name
+description: One-line description of what this skill does.
+  Used by Claude Code to decide when to load it.
+---
+
+# Skill Title
+
+## When to use this skill
+
+Concrete user prompts or situations that should trigger this skill:
+
+- "my 850 failed with X"
+- "help me fix Y"
+- "I need to <thing>"
+
+## Inputs the skill needs
+
+What you should ask the user for up-front. E.g.:
+- The failing transaction ID
+- The customer entity
+- A sample 850 file
+
+## The recipe
+
+### Step 1 — <load context>
+What to do, what to query, what to read.
+SuiteQL snippets where relevant.
+
+### Step 2 — <intermediate reasoning>
+How to combine signals.
+
+### Step 3 — <propose action / output>
+What the skill produces. For destructive actions, propose first; never act without approval.
+
+## Behaviour rules
+
+Numbered list of "musts" and "must nots". Examples:
+
+1. **Never create a record without explicit user approval.** Always propose first.
+2. **Reject ambiguous matches.** If no candidate has high confidence, escalate — don't guess.
+3. **Never invent inputs.** If you can't find what you need in the data, say so.
+4. **Don't bundle unrelated fixes.** One skill run, one scoped change.
+5. **Show your reasoning.** Always explain which signals led to the proposal.
+6. **Reprocessing is NOT automated.** After creating a fix, tell the user to manually reprocess in NS.
+
+## Reference material
+
+Link to relevant `reference/*.md` files Claude should consult.
 ```
 
-### Running Tests
+## What makes a good skill
 
-```bash
-# TODO: Add test commands
-```
+- **Specific trigger prompts.** "User says X, Y, or Z" — concrete language Claude can pattern-match against.
+- **Explicit recipe.** Numbered steps with actual queries / actions, not vague guidance.
+- **Strong rejection rules.** Knowing when *not* to act is half the value. List the cases the skill should escalate or refuse.
+- **Cite the right reference docs.** Link to `reference/record-types.md` etc. instead of duplicating schema info inline.
+- **Include real example sessions** in `examples.md` — annotated Claude transcripts where the skill worked well.
 
-### Building
+## What not to put in a skill
 
-```bash
-# TODO: Add build commands
-```
+- **Customer-specific data.** No customer names, account IDs, SKUs, or actual EDI content checked into this repo. Use placeholders (`<customer-id>`, `ABC-123`).
+- **Credentials.** The repo is gitignored against `.env*` for a reason. If you accidentally commit a token, treat it as compromised — rotate immediately.
+- **One-off fixes for a single customer.** Skills are reusable procedures. If something is uniquely a one-customer problem, document it in your own notes, not here.
 
 ## Contributing
 

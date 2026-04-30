@@ -1,0 +1,21 @@
+{
+  "name": "orderful-netsuite-skills",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Claude Code skills for Orderful NetSuite SuiteApp customer onboarding and support",
+  "license": "Apache-2.0",
+  "scripts": {
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "oauth-1.0a": "^2.2.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "eslint": "^9.15.0",
+    "eslint-plugin-headers": "^1.3.4",
+    "globals": "^15.12.0"
+  }
+}

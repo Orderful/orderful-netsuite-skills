@@ -2,8 +2,6 @@
 #
 # Scans PRs for new dependencies with known vulnerabilities or disallowed licenses (§3.2).
 # Free for public repositories.
-#
-# TODO: Before publishing, verify action SHA is current.
 
 name: Dependency Review
 

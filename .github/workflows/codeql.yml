@@ -2,9 +2,6 @@
 #
 # Runs CodeQL analysis on every push to main and on PRs.
 # Free for public repositories (§4.3).
-#
-# TODO: Before publishing, verify action SHAs are current.
-# TODO: Update the `language` matrix for this project's languages.
 
 name: CodeQL
 
@@ -28,9 +25,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # TODO: Update this list for the languages in this repo.
-        # Supported: javascript, typescript, python, go, ruby, java, kotlin,
-        # csharp, cpp, swift
         language: ['javascript-typescript']
 
     steps:

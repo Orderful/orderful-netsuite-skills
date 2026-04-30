@@ -6,7 +6,7 @@
 
 If you discover a security vulnerability in this project, please report it via email to **[security@orderful.com](mailto:security@orderful.com)**.
 
-You may also use GitHub's [Private Vulnerability Reporting](https://github.com/orderful/PROJECT_NAME/security/advisories/new) feature on this repository's Security tab.
+You may also use GitHub's [Private Vulnerability Reporting](https://github.com/orderful/orderful-netsuite-skills/security/advisories/new) feature on this repository's Security tab.
 
 For our full vulnerability disclosure policy, including scope, safe harbor provisions, and guidelines for security researchers, see: **[orderful.com/security/vulnerability-disclosure](https://www.orderful.com/security/vulnerability-disclosure)**
 
