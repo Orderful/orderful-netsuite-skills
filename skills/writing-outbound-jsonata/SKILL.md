@@ -5,7 +5,7 @@ description: Author and iterate JSONata expressions that fix outbound EDI messag
 
 # Writing Outbound JSONata
 
-JSONata is the SuiteApp's escape hatch for customer-specific outbound message overrides — when the default mapper doesn't satisfy a partner's spec, you author a JSONata expression on the customer's EDI Enabled Transaction Type record (the "Advanced mapping" field) that transforms the default Mosaic JSON message into a valid one.
+JSONata is the SuiteApp's escape hatch for customer-specific outbound message overrides — when the default mapper doesn't satisfy a partner's spec, you author a JSONata expression on the customer's EDI Enabled Transaction Type record (the "Advanced mapping" field) that transforms the default JSON message into a valid one. (The schema in play here is Orderful's JSON form of EDI X12 — *not* Mosaic, which is a separate, newer, simplified schema for common transaction types.)
 
 This skill is the procedure for doing that authoring loop in a way that doesn't waste hours on schema rejection mysteries.
 
@@ -74,12 +74,12 @@ The result is a JSON string with this shape:
 
 **Critical**: the actual EDI segments live nested under `message`. The wrapper (`sender`/`receiver`/`type`/`stream`) is part of `$defaultValues` inside JSONata. Orderful's `/v3/transactions/{id}/message` REST endpoint hides this wrapper — paths from the Orderful UI's Rules Editor are *not* the same paths JSONata uses. **Always prepend `message.`** when writing transform paths.
 
-### Step 2 — Map each validation error to a Mosaic path
+### Step 2 — Map each validation error to a JSON path
 
 For each error in the partner's Errors tab:
 - Identify the X12 element (e.g. LIN02, N102, BSN05, TD101)
 - Find where the SuiteApp emits it in `message.transactionSets[0]…` — open the saved message and locate the path
-- Note whether the field is missing entirely, is the wrong value, or has the wrong field name (Mosaic and X12 element names don't always align)
+- Note whether the field is missing entirely, is the wrong value, or has the wrong field name (Orderful's JSON field names and X12 element names don't always align)
 
 Common gotchas (real ones from production):
 
@@ -87,7 +87,7 @@ Common gotchas (real ones from production):
 |---|---|
 | `<x>` is not a valid input → only X/Y/Z allowed | The SuiteApp's default value for that element doesn't satisfy the partner's restricted code list. Override to a valid value. |
 | Element is mandatory | The SuiteApp leaves it null/absent. Set it from a custom field, a SuiteQL lookup, or a hardcoded value. |
-| `must NOT have additional properties - <field>` | This is *Orderful's* schema rejecting the payload before sending. The field name is wrong — find the right Mosaic name in the existing message structure (e.g. `unitOrBasisForMeasurementCode`, not `unitOfMeasureCode`). |
+| `must NOT have additional properties - <field>` | This is *Orderful's* schema rejecting the payload before sending. The field name is wrong — find the right Orderful JSON field name in the existing message structure (e.g. `unitOrBasisForMeasurementCode`, not `unitOfMeasureCode`). |
 | Validation error nests under a different path than expected | The Orderful UI's Rules Editor shows the *normalized* path. JSONata's path is one level deeper — look at the actual NS-saved message to find the real nesting. Example: `purchaseOrderTypeCode` lives on `HL_loop[<O>].purchaseOrderReference[0]`, NOT on `beginningSegmentForShipNotice[0]`. |
 
 ### Step 3 — Write the JSONata transform
@@ -235,5 +235,5 @@ Once VALID, summarize for the user:
 
 ## Reference material
 
-- [`reference/outbound-jsonata.md`](../../reference/outbound-jsonata.md) — full reference: input/context variables, the wrapped-envelope pattern, transform operator semantics, registered SuiteQL functions, common Mosaic field names, schema gotchas, and an annotated worked-example expression covering N1 / TD1 / TD5 / REF / LIN.
+- [`reference/outbound-jsonata.md`](../../reference/outbound-jsonata.md) — full reference: input/context variables, the wrapped-envelope pattern, transform operator semantics, registered SuiteQL functions, common Orderful JSON field names, schema gotchas, and an annotated worked-example expression covering N1 / TD1 / TD5 / REF / LIN.
 - [`reference/record-types.md`](../../reference/record-types.md) — schema for `customrecord_orderful_edi_customer_trans` (where the JSONata field lives), `customrecord_orderful_transaction` (the saved-message field), and related records.

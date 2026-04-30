@@ -2,6 +2,8 @@
 
 Technical reference for authoring JSONata expressions that override the Orderful SuiteApp's default outbound message mapping.
 
+> **Schema note**: Outbound messages here use **Orderful's JSON schema** — a JSON form of EDI X12. This is *not* the same as **Mosaic**, which is a separate, newer, simplified Orderful schema for common transaction types. Everything in this reference is about the JSON-X12 schema unless explicitly noted otherwise.
+
 JSONata expressions run inside the SuiteApp's outbound message generator. They live on the customer's `customrecord_orderful_edi_customer_trans` record (the EDI Enabled Customer Transaction, or "ECT") in the `custrecord_edi_enab_jsonata` field. The version selector `custrecord_edi_enab_trans_jsonata_ver` should be set to **V2** for the transform syntax used throughout this reference.
 
 ## Where the expression runs
@@ -152,11 +154,11 @@ If `$someValueThatMightBeNull` is null, the result has no `identificationCode` k
 "identificationCode": $someValueThatMightBeNull ? $someValueThatMightBeNull : "default"
 ```
 
-## Mosaic field names that bite
+## Orderful JSON field names that bite
 
 Orderful's outbound schema uses specific field names that don't always match the X12 element name. If you guess and get it wrong, the SuiteApp returns `must NOT have additional properties - <field>` from the local schema validation step (before any partner sees the message).
 
-| X12 element | Mosaic field name | NOT |
+| X12 element | Orderful JSON field name | NOT |
 |---|---|---|
 | TD108 (Unit / Basis for Measurement Code) | `unitOrBasisForMeasurementCode` | ~~`unitOfMeasureCode`~~ |
 | TD106 (Weight Qualifier) | `weightQualifier` | (matches) |
@@ -388,7 +390,7 @@ For transforms that depend on `$lookupSingleSuiteQL`, mock the `$var` it produce
 
 ## Schema gaps that JSONata cannot fix
 
-JSONata can only set fields that exist in Orderful's outbound Mosaic schema for the document type. If a partner requires an X12 element that Orderful's schema doesn't currently expose at any path, the SuiteApp's local schema validation rejects the payload before send with `must NOT have additional properties - <fieldName>`.
+JSONata can only set fields that exist in Orderful's outbound JSON schema for the document type. If a partner requires an X12 element that Orderful's schema doesn't currently expose at any path, the SuiteApp's local schema validation rejects the payload before send with `must NOT have additional properties - <fieldName>`.
 
 When you hit this:
 1. Search the SuiteApp's outbound message-shape definitions to confirm the field genuinely isn't there (don't conclude this from one failed attempt — try alternative field names first).
