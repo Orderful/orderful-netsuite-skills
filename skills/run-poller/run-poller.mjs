@@ -1,10 +1,5 @@
 #!/usr/bin/env node
-// Trigger Orderful inbound polling MR via the SuiteApp's run-poller RESTlet.
-//
-// Usage:
-//   node run-poller.mjs <customer-dir>
-//
-// Where <customer-dir> contains a .env populated by the netsuite-setup skill.
+// Copyright (c) 2026 Orderful, Inc.
 
 import { config as loadEnv } from 'dotenv';
 import { existsSync } from 'node:fs';
