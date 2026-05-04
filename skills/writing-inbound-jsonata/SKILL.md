@@ -253,17 +253,48 @@ $shipParty := (
 
 The predicate `[partyIdentification[0].entityIdentifierCode = $code]` reads as: "keep N1_loop entries whose first partyIdentification has the given code." JSONata's `=` (single equals) is the equality operator; `==` always evaluates false here.
 
-## Where to put what — JSONata vs. Header Field Mapping vs. typed BDO
+## Where to put what — check the SuiteApp's customer-record knobs FIRST
 
-There are three places to set values on the resulting Sales Order, and they're scoped differently:
+There are four places to influence the resulting Sales Order, and they're scoped differently. Before you write any JSONata, check whether the SuiteApp already ships a customer-record field for what you're trying to do — many of the most common defaults already have a purpose-built knob and don't need a mapper at all.
 
 | Mechanism | Storage | Scope | Use for |
 |---|---|---|---|
-| **JSONata Advanced Mapping** | `custrecord_edi_enab_jsonata` on the EDI Enabled Transaction record | **Per customer × per doc type** | Customer-specific defaults, complex transformations, anything keyed off raw EDI segments |
+| **Customer-record SuiteApp settings** (`custentity_orderful_*`) | Fields on the customer record itself | **Per customer** (across all doc types) | Anything the SuiteApp already exposes — see "Common customer-record knobs" below. Always check here first. |
+| **JSONata Advanced Mapping** | `custrecord_edi_enab_jsonata` on the EDI Enabled Transaction record | **Per customer × per doc type** | Customer-specific defaults the SuiteApp doesn't have a knob for, complex transformations, anything keyed off raw EDI segments |
 | **Custom Header Field Mapping** (`customrecord_orderful_edi_field_map_head`) | Standalone records | **Per doc type × per subsidiary** (no customer field on the schema) | Universal mappings that apply to *every* customer in a subsidiary for a given doc type |
 | **Typed BDO override** (`transaction.X` directly) | inside the JSONata transform | Same as JSONata | Standard SO fields the SuiteApp explicitly handles (`department`, `location`, `shippingAddress`, `requestedShipDate`, `mustShipBy`, etc.) — see `TypesAndUtil/businessDataObject.ts` |
 
-Common mistake: using header field mapping for a single-customer default (e.g. "Acme Foods always uses Order Channel = 3"). The mapping has no customer scope, so it'll fire for every other customer in the same subsidiary using the same doc type. Customer-specific statics belong in JSONata.
+### Common customer-record knobs (`custentity_orderful_*`)
+
+A non-exhaustive list, but covers the cases that come up most often. Always run a `SELECT scriptid, name FROM CustomField WHERE LOWER(scriptid) LIKE 'custentity_orderful%'` against the customer's account to see the full current set — the SuiteApp adds fields over time.
+
+| Field | What it does |
+|---|---|
+| `custentity_orderful_so_form_override` | Sets the Sales Order custom form for inbound 850s from this customer. **If the SO needs to land on a specific MHI/legacy form, this is the answer — not JSONata.** |
+| `custentity_orderful_isa_id` / `_isa_id_test` | Production / test ISA IDs the customer is identified by |
+| `custentity_orderful_inter_sender_id` | Interchange sender override |
+| `custentity_orderful_split_by_shipto` / `_split_by_store` | Split inbound POs into multiple SOs by ship-to or store |
+| `custentity_orderful_multiple_location` | Allow a single SO to span multiple NS locations |
+| `custentity_orderful_shipmethod_static` / `_shipcarrier_static` | Static shipping method / carrier defaults |
+| `custentity_orderful_shipping_acct` | Shipping account number |
+| `custentity_orderful_shipto_n1_id` / `_shipto_use_entityid` | Sub-customer ship-to lookup behaviour |
+| `custentity_orderful_subcust_rep` | What sub-customers represent (locations, ship-tos, etc.) |
+| `custentity_orderful_use_850_date` | Use the EDI 850's date field as the SO trandate |
+| `custentity_orderful_use_edi_pricing` | Trust the EDI's prices vs. NetSuite item prices |
+| `custentity_orderful_auto_acknowledge` | Initialize SOs in "Pending Fulfillment" status |
+| `custentity_orderful_poack_handling_prefs` | 855 handling preferences |
+| `custentity_orderful_asn_handling_prefs` / `_asn_wo_pack` | 856 handling preferences |
+| `custentity_orderful_inv_handling_prefs` | 810 handling preferences |
+| `custentity_orderful_cm_handling_prefs` | Credit memo handling preferences |
+| `custentity_orderful_wso_handling_prefs` / `_wstpo_hp` / `_wst_handling_prefs` | 940 / 943 / 944 warehouse handling preferences |
+| `custentity_orderful_del_date_source` / `_del_date_cust_source` | Where to source the scheduled delivery date from |
+| `custentity_orderful_itemship_source` / `_itemship_cust_source` | Where to source per-item ship dates from |
+| `custentity_orderful_location_sources` | Location resolution strategy |
+
+### Common mistakes
+
+- **Using header field mapping for a single-customer default** (e.g. "Acme Foods always uses Order Channel = 3"). The mapping has no customer scope, so it'll fire for every other customer in the same subsidiary using the same doc type. Customer-specific statics belong in JSONata or — even better — a SuiteApp customer-record knob if one exists.
+- **Writing JSONata for a default the SuiteApp already exposes.** If you find yourself overriding `customform`, splitting by ship-to, or hardcoding a static carrier in JSONata, stop and check the `custentity_orderful_*` field list — there's almost certainly a knob for it. The SuiteApp's logic stays consistent across versions; bespoke JSONata can drift.
 
 ## Workflow when authoring a new mapping
 
