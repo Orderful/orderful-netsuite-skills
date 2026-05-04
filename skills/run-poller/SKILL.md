@@ -5,7 +5,7 @@ description: Trigger Orderful's inbound polling MapReduce in a NetSuite customer
 
 # Run Inbound Poller
 
-Triggers `customscript_orderful_inbound_mr` (the inbound polling MapReduce) in a customer's NetSuite by calling the SuiteApp's `customscript_orderful_run_poller_rl` RESTlet over TBA.
+Triggers `customscript_orderful_inbound_mr` (the inbound polling MapReduce) in a customer's NetSuite by POSTing `{ "action": "triggerInboundPolling" }` to the SuiteApp's `customscript_orderful_agent_write_rl` RESTlet over TBA. The RESTlet is the generic Orderful Agent write surface; this skill exercises only its `triggerInboundPolling` action.
 
 The polling MR pulls pending transactions from Orderful's polling bucket(s) into NetSuite. It runs on a 15-minute schedule by default; this skill is for ad-hoc triggers — after configuration changes, when debugging stuck transactions, during demos, or any time a contractor would otherwise open NetSuite to run the script deployment manually.
 
@@ -37,7 +37,7 @@ Run the script:
 node <path-to-this-skill>/run-poller.mjs ~/orderful-onboarding/<slug>
 ```
 
-The script loads the customer's `.env`, picks `NS_SB_*` or `NS_PROD_*` based on `ENVIRONMENT`, TBA-signs a GET to the RESTlet URL, and prints the response.
+The script loads the customer's `.env`, picks `NS_SB_*` or `NS_PROD_*` based on `ENVIRONMENT`, TBA-signs a POST to the RESTlet URL with `{ "action": "triggerInboundPolling" }` as the body, and prints the response.
 
 ### Step 3 — Read the result
 
@@ -46,25 +46,44 @@ A successful response looks like:
 ```json
 {
   "status": "success",
-  "taskId": "ABCDEF1234567",
-  "mrStatus": "PENDING",
+  "taskId": "MAPREDUCETASK_...",
+  "mrStatus": {
+    "type": "task.MapReduceScriptTaskStatus",
+    "taskId": "MAPREDUCETASK_...",
+    "scriptId": 546,
+    "deploymentId": 4,
+    "status": "PENDING",
+    "stage": null
+  },
   "scriptId": "customscript_orderful_inbound_mr",
   "deploymentId": "customdeploy_orderful_inbound_mr"
 }
 ```
 
 - `taskId` is the NetSuite task scheduler ID for the running MapReduce
-- `mrStatus` will be `PENDING`, `PROCESSING`, `COMPLETE`, or `FAILED` — `PENDING`/`PROCESSING` is normal; the task continues server-side after this skill returns
+- `mrStatus.status` will be `PENDING`, `PROCESSING`, `COMPLETE`, or `FAILED` — `PENDING`/`PROCESSING` is normal; the task continues server-side after this skill returns
 
 To verify execution, have the user check NetSuite: **Customization > Scripting > Script Deployments > "Orderful | Polling Inbound Transactions" > Execution Log**.
+
+### Required role permissions
+
+The token's role needs all of these on **Setup > Users/Roles > Manage Roles > [role] > Permissions > Setup tab**:
+
+- **Log in using Access Tokens** = Full
+- **REST Web Services** = Full
+- **SuiteScript** = Full *(executes the RESTlet itself)*
+- **SuiteScript Scheduling** *(no level — just add the row; required because the RESTlet calls `task.create()` to submit the MapReduce)*
+
+Administrator already has all four. Custom roles commonly ship with the first two but not the last two — that's the default failure mode for a fresh integration. See troubleshooting below for the specific error messages each missing permission produces.
 
 ### Step 4 — Troubleshoot if needed
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| 4xx with `INVALID_LOGIN_INVALID_SCRIPT_ID` *or* `INVALID_LOGIN_ATTEMPT` on a `.env` already validated by `/netsuite-setup` | Customer's installed SuiteApp version is older than this RESTlet (most common cause for a brand-new endpoint). NetSuite returns either error code depending on the account. | Upgrade the SuiteApp via `My SuiteApps` to the version that includes [NS-926](https://orderful.atlassian.net/browse/NS-926); or fall back to running the MR manually (NetSuite UI: Customization > Scripting > Scheduled Script Status > New > pick `customscript_orderful_inbound_mr`) |
+| 404 with `SSS_INVALID_SCRIPTLET_ID` (or older accounts: `INVALID_LOGIN_INVALID_SCRIPT_ID` / `INVALID_LOGIN_ATTEMPT`) on a `.env` already validated by `/netsuite-setup` | Customer's installed SuiteApp version is older than the agent-write RESTlet. | Upgrade the SuiteApp via `My SuiteApps` to the version that includes [NS-926](https://orderful.atlassian.net/browse/NS-926) ([netsuite-connector#758](https://github.com/Orderful/netsuite-connector/pull/758)); or fall back to running the MR manually (NetSuite UI: Customization > Scripting > Scheduled Script Status > New > pick `customscript_orderful_inbound_mr`) |
 | `INVALID_LOGIN_ATTEMPT` *and* `/netsuite-setup` Step 5 also fails | Bad TBA credentials | Re-validate via `/netsuite-setup`; the Login Audit Trail diagnostic in that skill's Step 5 isolates which value is wrong |
-| `INSUFFICIENT_PERMISSION` | Token's role can't trigger MapReduce tasks | Token role needs **REST Web Services** + script execution permissions; Administrator works out of the box |
+| Response body contains `INSUFFICIENT_PERMISSION` with message *"You need the 'SuiteScript' permission..."* | Token's role is missing the **SuiteScript** permission | **Setup > Users/Roles > Manage Roles > [role] > Permissions > Setup tab** — add **SuiteScript** = `Full` |
+| Response body contains `INSUFFICIENT_PERMISSION` with no specific permission named (or "You do not have permission to perform this operation") | Token's role can't submit MapReduce tasks via `task.create()` | **Setup > Users/Roles > Manage Roles > [role] > Permissions > Setup tab** — add **SuiteScript Scheduling** (no level selector — just add the row). Note: this is a different permission from "SuiteScript". Most custom roles need *both* |
 | MR runs but processes 0 transactions | `custscript_orderful_polling_bucket` company-level script param is empty | Customization > Scripting > Scripts > "Orderful \| Polling Inbound Transactions" > Deployments > the deployment > script param values |
 
 ## Behaviour rules
@@ -79,6 +98,6 @@ To verify execution, have the user check NetSuite: **Customization > Scripting >
 ## Reference material
 
 - `customscript_orderful_inbound_mr` (the MR being triggered) — defined in `Objects/customscript_orderful_inbound_mr.xml` in the [netsuite-connector](https://github.com/Orderful/netsuite-connector) repo
-- The `run-poller` RESTlet itself: [netsuite-connector#758](https://github.com/Orderful/netsuite-connector/pull/758) ([NS-926](https://orderful.atlassian.net/browse/NS-926))
+- The agent-write RESTlet (the endpoint this skill posts to): `FileCabinet/SuiteApps/com.orderful.orderfulnetsuite/ConfigAndUISupport/orderful_agentWrite_RL.ts` — introduced in [netsuite-connector#758](https://github.com/Orderful/netsuite-connector/pull/758) ([NS-926](https://orderful.atlassian.net/browse/NS-926)). Action used here: `triggerInboundPolling`
 - Polling docs: [docs.orderful.com — inbound poller](https://docs.orderful.com/docs/inbound-poller)
 - NetSuite `N/task` module: https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4623372451.html

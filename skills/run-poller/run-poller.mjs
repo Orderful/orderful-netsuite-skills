@@ -12,8 +12,8 @@ import { resolve } from 'node:path';
 import OAuth from 'oauth-1.0a';
 import crypto from 'node:crypto';
 
-const SCRIPT_ID = 'customscript_orderful_run_poller_rl';
-const DEPLOY_ID = 'customdeploy_orderful_run_poller_rl';
+const SCRIPT_ID = 'customscript_orderful_agent_write_rl';
+const DEPLOY_ID = 'customdeploy_orderful_agent_write_rl';
 
 const customerDir = process.argv[2];
 if (!customerDir) {
@@ -79,14 +79,19 @@ const token = {
   key: process.env[`${nsPrefix}_TOKEN_ID`],
   secret: process.env[`${nsPrefix}_TOKEN_SECRET`],
 };
-const requestData = { url, method: 'GET' };
+const requestBody = JSON.stringify({ action: 'triggerInboundPolling' });
+const requestData = { url, method: 'POST' };
 const authHeader = oauth.toHeader(oauth.authorize(requestData, token));
 authHeader.Authorization += `, realm="${accountId}"`;
 
 let res;
 let text;
 try {
-  res = await fetch(url, { method: 'GET', headers: { ...authHeader } });
+  res = await fetch(url, {
+    method: 'POST',
+    headers: { ...authHeader, 'Content-Type': 'application/json' },
+    body: requestBody,
+  });
   text = await res.text();
 } catch (error) {
   console.error('FAIL: Unable to call the run-poller RESTlet.');
@@ -107,16 +112,18 @@ const isSuccess =
   res.ok && body && typeof body === 'object' && body.status === 'success';
 const isEndpointReportedError =
   res.ok && body && typeof body === 'object' && body.status === 'error';
+const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
 const isMissingEndpoint =
   res.status === 404 ||
-  (typeof body === 'string' && body.includes('INVALID_LOGIN_INVALID_SCRIPT_ID')) ||
-  (body && typeof body === 'object' && JSON.stringify(body).includes('INVALID_LOGIN_INVALID_SCRIPT_ID'));
+  bodyStr.includes('SSS_INVALID_SCRIPTLET_ID') ||
+  bodyStr.includes('INVALID_LOGIN_INVALID_SCRIPT_ID');
 
 if (isSuccess) {
   console.log('SUCCESS');
   console.log(JSON.stringify(body, null, 2));
   console.log('');
-  console.log(`Task ${body.taskId} is ${body.mrStatus}.`);
+  const mrStatus = typeof body.mrStatus === 'object' ? body.mrStatus?.status : body.mrStatus;
+  console.log(`Task ${body.taskId} is ${mrStatus}.`);
   console.log(
     'Check NetSuite: Customization > Scripting > Script Deployments > "Orderful | Polling Inbound Transactions" > Execution Log',
   );
