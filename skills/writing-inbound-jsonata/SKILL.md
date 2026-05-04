@@ -108,6 +108,66 @@ The map type allows `null` and `undefined`. If the source field is absent (e.g.,
 "custbody_orderful_admin_phone": $admin.phone ? $admin.phone : $defaultValues.transaction.userDefinedFields.custbody_orderful_admin_phone
 ```
 
+## Setting custom date fields — the `_textFields` workaround
+
+**Read this before writing to any `custbody_*_date` (or `custentity_*_date`) field. There's a SuiteApp bug that makes the obvious approach fail.**
+
+If you do this:
+
+```jsonata
+"userDefinedFields": {
+  "custbody_my_cancel_date": "20260130"   // YYYYMMDD from EDI
+}
+```
+
+…or this (formatted):
+
+```jsonata
+"userDefinedFields": {
+  "custbody_my_cancel_date": "1/30/2026"  // M/D/YYYY
+}
+```
+
+…the SO save fails with `INVALID_FLD_VALUE: Invalid date value (must be M/D/YYYY)`. Why: `userDefinedFields` is spread into the create payload and applied via `record.setValue(fieldId, value)`. NetSuite's `setValue` on a date field requires a `Date` *object*, not a string. JSONata can't produce a JS `Date` (JSON has no Date type), so any string you emit fails when `record.save()` runs.
+
+The Custom Header Field Mapping (`customrecord_orderful_edi_field_map_head`) is meant to handle this — its code path detects date fields and runs `parseDate(yyyymmdd)`. But the detection is buggy: `createSalesOrder.ts:871` checks `field_value_type === 'DATE'` while NetSuite's `customfield.fieldvaluetype` actually returns `"Date"` (mixed case). The branch is dead code as written, so header field mapper writes also fail on dates.
+
+### The fix
+
+`createNSTransaction.ts:33-38` reads a special key `header._textFields` — an array of field IDs. Anything listed there gets `setText` instead of `setValue`. `setText` accepts the company's text date format directly (M/D/YYYY for US accounts).
+
+So: emit your dates as M/D/YYYY strings AND list them under `_textFields` inside `userDefinedFields`:
+
+```jsonata
+(
+  $nsDate := function($yyyymmdd) {
+    $yyyymmdd
+      ? $string($number($substring($yyyymmdd, 4, 2))) & "/"
+        & $string($number($substring($yyyymmdd, 6, 2))) & "/"
+        & $substring($yyyymmdd, 0, 4)
+      : null
+  };
+  $defaultValues ~> | transaction | {
+    "userDefinedFields": {
+      "_textFields": [
+        "custbody_my_cancel_date",
+        "custbody_my_required_date"
+      ],
+      "custbody_my_cancel_date": $nsDate(message.transactionSets[0].dateTimeReference[dateTimeQualifier = "001"].date),
+      "custbody_my_required_date": $nsDate($defaultValues.transaction.date)
+    }
+  } |
+)
+```
+
+The `$nsDate` helper strips leading zeros (`"01/30/2026"` → `"1/30/2026"`) — this matters because the error message specifically says `M/D/YYYY`, not `MM/DD/YYYY`, even though both usually parse.
+
+### Caveats
+
+- **`_textFields` from `userDefinedFields` overrides whatever `createSalesOrderHeader` was going to set.** The SuiteApp uses `_textFields: ['discountrate']` for the rare case of a discount whose rate is a percentage string (`"-5.00%"`). If your inbound transaction has a single text-mode discount AND you're using `_textFields` for dates, your override clobbers the discount-rate text mode. Worth a quick sanity check on customers that use percentage discounts.
+- **The bug at `createSalesOrder.ts:871` and `:979` should be filed** — the same `field_value_type === 'DATE'` typo appears in both the header and line mappers. Until the SuiteApp ships a fix, `_textFields` is the only way to get a string-typed date into a custom date field via inbound EDI processing.
+- **For the typed BDO dates** (`transaction.mustShipBy`, `earliestDelivery`, `latestDelivery`, `startDate`, `endDate`, `requestedShipDate`, `date`), you don't need `_textFields`. `createSalesOrderHeader` runs `parseDate(value, yyyyMMdd)` explicitly on each of those before they hit NetSuite, so YYYYMMDD strings work directly. Use `_textFields` only for arbitrary `custbody_*` / `custentity_*` date fields.
+
 ## Pre-registered helper functions
 
 Defined in `TransactionHandling/mapping/inboundJsonata.engine.ts:204-238`. All are available with no import.
@@ -116,7 +176,7 @@ Defined in `TransactionHandling/mapping/inboundJsonata.engine.ts:204-238`. All a
 |---|---|---|
 | `$lookupContact(contacts, code)` | `{ email, phone, extension, fax }` or `null` | Finding the first PER-segment contact with a given `contactFunctionCode` and pulling its standard communication channels |
 | `$lookupQualifiedValues(obj, qualifier)` | `string[]` | Generic version — extract all values from an object whose paired qualifier matches (e.g., pull all `EM` emails from a contact) |
-| `$lookupLoopInstances(loop, code)` | array of loop entries | Filter an `N1_loop` (or similar) by `entityIdentifierCode` (`"BT"`, `"ST"`, `"SH"`, etc.) |
+| `$lookupLoopInstances(loopInstances, variantKeyCodes, lookupKeyCodes)` | array of loop entries | **3-arg, not 2.** Matches `lookupKeyCodes` against an *already-extracted* `variantKeyCodes` array running parallel to `loopInstances`. Awkward for casual filtering — for N1 loops, prefer a direct JSONata predicate (see "Filtering N1 loops" below). |
 | `$lookupItems(ediId, qualifier)` | `{ id, ... }` matches | Resolve EDI item identifiers to NetSuite item internal IDs using the customer's item config |
 | `$lookupItemMappings(partnerSku)` | match record | Resolve a partner part number to a NetSuite item via Custom Item Lookup records |
 | `$lookupRecords(lookupName, value)` | record(s) | Generic NetSuite lookup using one of the customer's configured "Lookups" |
@@ -152,19 +212,58 @@ The expression's root context is the full Orderful transaction. Top-level keys:
 - `sender`, `receiver` — `{ isaId, isaIdQualifier, testIsaId, testIsaIdQualifier, name }`
 - `customer` — `{ id, companyName, altName, prodIsaId, testIsaId, multiShipToEnabled, locationSource, enabledTransactionTypes[], ... }`
 - `metaData` — `{ orderfulId, type, production, referenceNumber, validationStatus, deliveryStatus, acknowledgementStatus, createdAt, lastUpdatedAt, tradingPartnerId, tradingPartnerName, customerConfig, autoAcknowledgeIfInventoryOnHand }`
-- `message.transactionSets[0]` — the actual EDI content. Key sub-fields for 850:
-  - `purchaseOrderIdentification[]` — header (PO number, date, type code, status code)
-  - `extendedReferenceInformation[]` — REF segments
-  - `contact[]` — PER segments (use `$lookupContact`)
-  - `dateTime[]` — DTM segments
+- `message.transactionSets[0]` — the actual EDI content. Common sub-field names you'll see for 850:
+  - `purchaseOrderIdentification[]` or `beginningSegmentForPurchaseOrder[]` — header (PO number, date, type code)
+  - `extendedReferenceInformation[]` or `referenceInformation[]` — REF segments
+  - `contact[]` or `administrativeCommunicationsContact[]` — PER segments (use `$lookupContact`)
+  - `dateTime[]` or `dateTimeReference[]` — DTM segments
   - `noteSpecialInstruction[]` — NTE segments
-  - `transportationInstructions[]` — TD5 (routing, carrier)
-  - `N1_loop[]` — N1/N3/N4 parties (BT, ST, SH, etc. — use `$lookupLoopInstances`)
-  - `G72_loop[]` — header-level allowances/charges
-  - `G68_loop[]` — line items (PO1)
-  - `totalPurchaseOrder[]` — CTT control totals
+  - `transportationInstructions[]` or `carrierDetailsRoutingSequenceTransitTime[]` — TD5 (routing, carrier)
+  - `N1_loop[]` — N1/N3/N4 parties (BT, ST, SH, etc.)
+  - `G72_loop[]` or `SAC_loop[]` — header-level allowances/charges
+  - `G68_loop[]` or `PO1_loop[]` — line items
+  - `totalPurchaseOrder[]` or `CTT_loop[]` — control totals
 
-A representative test fixture lives at `__tests__/jsonata/inboundJsonata.engine.spec.ts:124-298` — read that whenever you need to confirm a field name; the spec is the source of truth for what the engine sees.
+> ⚠️ **Field names vary across Mosaic versions and partner-specific schemas.** Some traders' messages use `dateTimeReference` while others use `dateTime`; some use `referenceInformation` while others use `extendedReferenceInformation`. Don't trust this list — always inspect the actual right-hand JSON pane in the Advanced Mapping UI (or the `custrecord_ord_tran_message` content on the Orderful Transaction record) to confirm the exact key names for *this* customer's transactions before writing your expression.
+
+A representative test fixture lives at `__tests__/jsonata/inboundJsonata.engine.spec.ts:124-298` — useful as a fallback reference, but the actual transaction's JSON is the source of truth for any given mapping.
+
+## Filtering N1 loops
+
+Because `$lookupLoopInstances` is awkward (3-arg, requires a parallel keys array), reach for direct JSONata predicates first:
+
+```jsonata
+// All ST parties:
+$st := message.transactionSets[0].N1_loop[partyIdentification[0].entityIdentifierCode = "ST"];
+
+// First MA party (or null):
+$ma := message.transactionSets[0].N1_loop[partyIdentification[0].entityIdentifierCode = "MA"][0];
+
+// Wrap as a helper:
+$partyByCode := function($code) {
+  message.transactionSets[0].N1_loop[partyIdentification[0].entityIdentifierCode = $code]
+};
+
+// ST → MA fallback (drop-ship-to-consumer 850s often have only MA):
+$shipParty := (
+  $st := $partyByCode("ST");
+  $count($st) > 0 ? $st[0] : $partyByCode("MA")[0]
+);
+```
+
+The predicate `[partyIdentification[0].entityIdentifierCode = $code]` reads as: "keep N1_loop entries whose first partyIdentification has the given code." JSONata's `=` (single equals) is the equality operator; `==` always evaluates false here.
+
+## Where to put what — JSONata vs. Header Field Mapping vs. typed BDO
+
+There are three places to set values on the resulting Sales Order, and they're scoped differently:
+
+| Mechanism | Storage | Scope | Use for |
+|---|---|---|---|
+| **JSONata Advanced Mapping** | `custrecord_edi_enab_jsonata` on the EDI Enabled Transaction record | **Per customer × per doc type** | Customer-specific defaults, complex transformations, anything keyed off raw EDI segments |
+| **Custom Header Field Mapping** (`customrecord_orderful_edi_field_map_head`) | Standalone records | **Per doc type × per subsidiary** (no customer field on the schema) | Universal mappings that apply to *every* customer in a subsidiary for a given doc type |
+| **Typed BDO override** (`transaction.X` directly) | inside the JSONata transform | Same as JSONata | Standard SO fields the SuiteApp explicitly handles (`department`, `location`, `shippingAddress`, `requestedShipDate`, `mustShipBy`, etc.) — see `TypesAndUtil/businessDataObject.ts` |
+
+Common mistake: using header field mapping for a single-customer default (e.g. "Acme Foods always uses Order Channel = 3"). The mapping has no customer scope, so it'll fire for every other customer in the same subsidiary using the same doc type. Customer-specific statics belong in JSONata.
 
 ## Workflow when authoring a new mapping
 
@@ -180,10 +279,12 @@ A representative test fixture lives at `__tests__/jsonata/inboundJsonata.engine.
 
 - ❌ Writing `"custbody_xxx": value` directly under `transaction`. The field type will reject it and the connector won't forward it. **Always use `userDefinedFields`.**
 - ❌ Splitting custom field writes across multiple `~> | transaction |` transforms. The second transform replaces the first's `userDefinedFields` entirely.
+- ❌ Writing a date string to a `custbody_*_date` field via `userDefinedFields` without listing it in `_textFields`. `setValue` rejects the string at save time. See "Setting custom date fields" above.
 - ❌ Returning a fresh BDO without overlaying `$defaultValues`. You'll lose every default mapping (addresses, line items, contacts).
 - ❌ Reading from `$defaultValues.transaction.contacts.*` for codes that aren't in the native list (BD, OC, IC, RE, SC, EA, CN, ZZ) — they won't be there. Use `$lookupContact` against the raw `contact[]` array instead.
 - ❌ Hardcoding line indices (`contact[0]`) when the order isn't guaranteed. Use predicates: `contact[contactFunctionCode = "OC"][0]` or `$lookupContact`.
 - ❌ Using `==` for equality in JSONata predicates. JSONata uses `=`. The expression `[code == "X"]` always returns `false`.
+- ❌ Calling `$lookupLoopInstances(loop, "ST")` (2-arg). The actual signature is 3-arg with a parallel `variantKeyCodes` array. For typical N1-loop filtering, write a direct predicate instead.
 
 ## Reference files (in netsuite-connector repo)
 
@@ -194,6 +295,8 @@ A representative test fixture lives at `__tests__/jsonata/inboundJsonata.engine.
 | `TransactionHandling/mapping/functions/` | All other helpers — `lookupItems.ts`, `lookupRecords.ts`, etc. |
 | `TransactionHandling/mapping/templates/875.jsonata` | Native template; canonical reference for how all 8 standard contacts map into the BDO |
 | `TransactionHandling/850/createSalesOrder.ts` (line 302, 413) | Where `userDefinedFields` is unpacked and spread onto the SO create |
+| `TransactionHandling/850/createSalesOrder.ts` (lines 866-877, 974-985) | Header & line custom-field mappers; the date-detection branches with the `field_value_type === 'DATE'` bug |
+| `TransactionHandling/common/createNSTransaction.ts` (lines 21, 33-45) | Where `header._textFields` is read and routes those fields through `setText` instead of `setValue` |
 | `TypesAndUtil/businessDataObject.ts` (lines 60-79) | BDO type definitions; `userDefinedFields` interface |
 | `__tests__/jsonata/inboundJsonata.engine.spec.ts` | Worked example of input → output, useful as test fixture and field-name reference |
 
