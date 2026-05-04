@@ -120,13 +120,13 @@ Either edit `reference/<existing>.md` or create `reference/<topic>.md`. Keep it 
 
 CRITICAL: scan everything you wrote (and any code snippets, comments, or examples) for real customer/partner data. Replace with the placeholders documented in `CONTRIBUTING.md`:
 
-| Real | Replace with |
+| What to scrub | Replace with |
 |---|---|
-| Real customer slug (e.g., `cambridge-pavers`) | `acme-foods`, `widgetco`, `northwind-retail-inc` |
-| Real customer name (e.g., "Artika") | "Acme Foods", "Widget Co", "Northwind Retail Inc." |
-| Real NS account ID (e.g., `td2817593`, `827395_SB2`) | `1234567`, `1234567_SB1`, `TDxxxxxxx` |
-| Real ISA ID | `ZZ0123456789ABC`, `<sender-isa-id>` |
-| Real API key, token, consumer secret | `<orderful-api-key>`, `<PASTE HERE>` |
+| Customer slug (real partner identifier, lowercase-hyphenated) | `acme-foods`, `widgetco`, `northwind-retail-inc` |
+| Customer display name (real partner company name) | "Acme Foods", "Widget Co", "Northwind Retail Inc." |
+| NetSuite account ID (production or sandbox) | `1234567`, `1234567_SB1`, `TDxxxxxxx` |
+| ISA ID (real trading partner identifier) | `ZZ0123456789ABC`, `<sender-isa-id>` |
+| API key, TBA token, consumer secret | `<orderful-api-key>`, `<PASTE HERE>` |
 
 If a snippet can't be fully sanitized, **abstract it** instead of leaving it: "for any sandbox customer with split-by-shipto enabled" beats "for the X customer where we set splitByShipTo=true on account 1234567_SB1".
 
