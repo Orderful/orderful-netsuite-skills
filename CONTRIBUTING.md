@@ -2,6 +2,35 @@
 
 Thank you for your interest in contributing! This document explains how to get involved.
 
+## One-time setup: signed commits
+
+This repo requires every commit on `main` to be cryptographically signed. GitHub displays a green "Verified" badge next to signed commits and will block any merge that introduces unsigned ones. Set this up before you make your first commit.
+
+**SSH signing (recommended — reuses your existing SSH key):**
+
+```bash
+git config --global gpg.format ssh
+git config --global user.signingkey ~/.ssh/id_ed25519.pub
+git config --global commit.gpgsign true
+```
+
+Then add the contents of `~/.ssh/id_ed25519.pub` as a **Signing Key** at https://github.com/settings/ssh/new — select "Signing Key" in the type dropdown. (If you already have the same public key registered as an Authentication Key, you still need to add it again as a separate Signing Key entry.)
+
+After this, `git commit` automatically signs every commit you make.
+
+For GPG signing instead, see [GitHub's commit signature verification docs](https://docs.github.com/en/authentication/managing-commit-signature-verification).
+
+### My PR has unsigned commits — how do I fix it?
+
+Rebase the branch to re-sign the existing commits in place:
+
+```bash
+git rebase --exec 'git commit --amend --no-edit -S' origin/main
+git push --force-with-lease origin <your-branch-name>
+```
+
+Force-pushing dismisses prior PR approvals — ask reviewers to re-approve after.
+
 ## When to contribute
 
 - **You used a skill, it almost worked but had a gap** → open a PR with your refinement (a clearer step, a better SuiteQL, a missing edge case in the behaviour rules)
@@ -25,15 +54,16 @@ Thank you for your interest in contributing! This document explains how to get i
 
 ### Submitting Code
 
-1. Fork the repository and create your branch from `main`.
-2. Write clear, focused commits — one logical change per commit.
-3. Add or update tests for your changes if applicable.
-4. Ensure all checks pass locally before pushing:
+1. Confirm commit signing is set up (see [One-time setup](#one-time-setup-signed-commits) above) — unsigned commits will block your PR from merging.
+2. Fork the repository and create your branch from `main`.
+3. Write clear, focused commits — one logical change per commit.
+4. Add or update tests for your changes if applicable.
+5. Ensure all checks pass locally before pushing:
    ```bash
    npm install && npm run lint
    ```
-5. Open a pull request against `main`.
-6. Fill out the PR template completely.
+6. Open a pull request against `main`.
+7. Fill out the PR template completely.
 
 ### Pull Request Expectations
 

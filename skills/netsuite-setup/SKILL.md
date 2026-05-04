@@ -55,7 +55,7 @@ Before the user starts filling in values, confirm (ask if unsure):
 
 - **Features enabled** in the customer's NetSuite: Setup > Company > Enable Features > SuiteCloud — "Token-Based Authentication" and "REST Web Services" must both be checked.
 - **Integration record** exists or will be created. If the user hasn't created one yet, point them to `INTEGRATION-RECORD-SETUP.md` in this skill's directory for the step-by-step.
-- **Access token** exists or will be created for a user/role with sufficient permissions. Also covered in `INTEGRATION-RECORD-SETUP.md`.
+- **Access token** exists or will be created for a user/role with sufficient permissions. Required role permissions are listed in `INTEGRATION-RECORD-SETUP.md` ("Required role permissions" section) — note that skills that trigger MapReduce scripts (e.g. `run-poller`) need both `SuiteScript = Full` and `SuiteScript Scheduling` on the role, which Administrator has by default but custom roles often don't.
 
 Orderful's SuiteApp does not currently ship a pre-configured integration record, so the customer must create their own.
 
@@ -83,7 +83,13 @@ Once the user confirms they've filled the file, run the validation script:
 node <path-to-this-skill>/test-connections.mjs ~/orderful-onboarding/<slug>
 ```
 
-The script reads `ENVIRONMENT` from the `.env` (defaults to sandbox) and picks the matching `NS_SB_*` or `NS_PROD_*` NetSuite credentials. It hits NetSuite (a harmless `SELECT TOP 1` SuiteQL query) and Orderful (a small authenticated GET to `api.orderful.com` — Orderful has one global endpoint, not a separate sandbox URL). It prints pass/fail per system.
+The script reads `ENVIRONMENT` from the `.env` (defaults to sandbox) and picks the matching `NS_SB_*` or `NS_PROD_*` NetSuite credentials. It runs three checks:
+
+1. **NetSuite** — a harmless `SELECT TOP 1` SuiteQL query (validates TBA + REST Web Services + role's basic data access).
+2. **RESTlet** — a probe POST to the SuiteApp's agent-write RESTlet with an unknown action (validates the SuiteApp version is current AND the role has `SuiteScript = Full`). This does *not* validate `SuiteScript Scheduling`; that perm only fails when an action like `triggerInboundPolling` actually calls `task.create()`, which `/run-poller` will surface clearly on first use.
+3. **Orderful** — a small authenticated GET to `api.orderful.com` (Orderful has one global endpoint, not a separate sandbox URL).
+
+It prints pass/fail per system.
 
 ### If NetSuite fails
 
@@ -97,6 +103,12 @@ Common causes, check in this order:
 
 **Diagnostic shortcut:** Before digging through values, check **`Setup > Users/Roles > User Management > View Login Audit Trail`** — filter to the user the token is bound to, look for a recent failure. **Empty trail = signature/realm failure (#1).** **Trail with detail = follow the detail (#2 or #3).** This 30-second check eliminates most guessing.
 
+### If the RESTlet check fails
+
+1. **`404 — endpoint not found`** — the customer's installed SuiteApp version predates the agent-write RESTlet (NS-926). Have them upgrade via **My SuiteApps**. Until that's done, `/run-poller` and any other agent-write skill will not work, but the rest of onboarding is unblocked.
+2. **`INSUFFICIENT_PERMISSION — missing SuiteScript permission`** — the role on the token doesn't have `SuiteScript = Full`. Add it on the role's **Setup tab** (and add `SuiteScript Scheduling` while you're there — see `INTEGRATION-RECORD-SETUP.md` "Required role permissions"). No need to regenerate the token after editing the role.
+3. **Other failure** — the script prints the raw response. If the RESTlet returned anything other than the expected "Unknown action" rejection, treat it like any other RESTlet failure and check the script execution log (Customization > Scripting > Script Deployments > "Orderful Agent Write" > Execution Log).
+
 ### If Orderful fails
 
 1. **401 / 403 "Application with key ... not found"** — the API key is wrong or hasn't been provisioned for this org. Orderful has one global endpoint (`api.orderful.com`) and one global key per org, so there's no "sandbox vs. prod key" to mix up — if it's failing, the key is either typo'd or not issued yet. Re-check the value in `app.orderful.com` > Settings > API Keys for the right org, or ask the Orderful team.
@@ -104,7 +116,7 @@ Common causes, check in this order:
 
 ## Step 6 — Confirm and summarize
 
-Once both validations pass:
+Once all three validations pass:
 
 - Confirm the customer directory path to the user.
 - Note which connections are working.

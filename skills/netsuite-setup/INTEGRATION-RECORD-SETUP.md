@@ -35,10 +35,26 @@ In the customer's NetSuite:
 2. Fill in:
    - **Application Name**: select the integration record you just created.
    - **User**: the NetSuite user whose permissions the token will use. For onboarding, this is typically an admin user or a dedicated onboarding user.
-   - **Role**: a role on that user that has sufficient permissions. Administrator works but is often overkill; a custom role with "REST Web Services" and "Log in using Access Tokens" permissions plus read access to transactions/items/customers is ideal. Orderful does not ship a recommended role — use Administrator if you're unsure and it's for short-term onboarding access.
+   - **Role**: a role on that user that has sufficient permissions (see [Required role permissions](#required-role-permissions) below). Administrator works out of the box and is fine for short-term onboarding access. A custom role is preferred for ongoing/production use.
    - **Token Name**: auto-generated is fine, or customize.
 3. **Save**.
 4. NetSuite will show you the **Token ID** and **Token Secret** **once**. Copy both into the `.env` file immediately — use `NS_SB_TOKEN_ID` / `NS_SB_TOKEN_SECRET` for a sandbox account, or `NS_PROD_*` for production.
+
+## Required role permissions
+
+The role on the access token needs all of these. Set on **Setup > Users/Roles > Manage Roles > [role] > Permissions**:
+
+| Tab | Permission | Level | Why |
+|---|---|---|---|
+| Setup | Log in using Access Tokens | Full | Required for any TBA call |
+| Setup | REST Web Services | Full | Required to hit `/services/rest/*` (SuiteQL, RESTlets, record API) |
+| Setup | SuiteScript | Full | Required to execute the SuiteApp's RESTlets |
+| Setup | SuiteScript Scheduling | (no level — just add) | Required for skills that trigger MapReduce scripts via `task.create()` (e.g. `run-poller`). Without this, the RESTlet returns `INSUFFICIENT_PERMISSION` |
+| Lists | Documents and Files | Full | The SuiteApp reads/writes EDI payloads to the File Cabinet |
+
+Plus any record-level read/write permissions the customer's onboarding scope requires (Transactions, Items, Customers, etc.). When in doubt, copy permissions from a working customer's role or start from Administrator and prune.
+
+If the access token already exists and you only need to update permissions, edit the role directly — the token doesn't need to be regenerated.
 
 ## Step 3 — Verify
 
