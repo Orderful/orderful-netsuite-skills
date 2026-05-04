@@ -1,0 +1,68 @@
+name: Daily PR Digest
+
+on:
+  schedule:
+    # 15:00 UTC = 8am PDT / 7am PST, Mon-Fri
+    - cron: '0 15 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  digest:
+    name: Build and post PR digest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build and post digest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          PRS=$(gh pr list --repo "$REPO" --state open --limit 50 \
+            --json number,title,url,author,createdAt,latestReviews,isDraft)
+
+          COUNT=$(echo "$PRS" | jq 'length')
+
+          if [ "$COUNT" -eq 0 ]; then
+            MESSAGE="📋 *Daily PR digest* — \`$REPO\`"$'\n\n'"No open PRs. 🎉"
+          else
+            HEADER="📋 *Daily PR digest* — \`$REPO\` ($COUNT open)"
+
+            BODY=$(echo "$PRS" | jq -r '
+              map({
+                number, title, url, isDraft,
+                author: .author.login,
+                age_days: ((now - (.createdAt | fromdateiso8601)) / 86400 | floor),
+                approvals: ([.latestReviews[]? | select(.state == "APPROVED")] | length)
+              })
+              | sort_by(.approvals, -.age_days)
+              | map(
+                  (if .approvals >= 2 then "🟢"
+                    elif .approvals == 0 and .age_days > 2 then "🔴"
+                    else "🟡" end) as $icon
+                  | (if .isDraft then " _(draft)_" else "" end) as $draft
+                  | "\($icon) <\(.url)|#\(.number) \(.title)>\($draft) — \(.approvals) approval\(if .approvals == 1 then "" else "s" end), \(.age_days)d, by @\(.author)"
+                )
+              | join("\n")
+            ')
+
+            MESSAGE="$HEADER"$'\n\n'"$BODY"
+          fi
+
+          echo "----- Message preview -----"
+          echo "$MESSAGE"
+          echo "---------------------------"
+
+          PAYLOAD=$(jq -n --arg msg "$MESSAGE" '{message: $msg}')
+
+          curl -X POST -H 'Content-Type: application/json' \
+            --data "$PAYLOAD" \
+            "$SLACK_WEBHOOK_URL" \
+            --fail --silent --show-error
+
+          echo "Posted to Slack."
