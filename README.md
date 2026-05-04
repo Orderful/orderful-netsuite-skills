@@ -134,6 +134,8 @@ Link to relevant `reference/*.md` files Claude should consult.
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
+> **First-time contributors:** before your first commit, complete the [signed-commits setup](CONTRIBUTING.md#one-time-setup-signed-commits) — `main` requires every commit to be cryptographically verified, and unsigned commits will block your PR from merging.
+
 ## Security
 
 If you discover a security vulnerability, please follow the process outlined in [SECURITY.md](SECURITY.md). **Do not open a public issue for security vulnerabilities.**
