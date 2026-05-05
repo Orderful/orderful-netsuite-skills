@@ -331,7 +331,7 @@ A non-exhaustive list, but covers the cases that come up most often. Always run 
 | `TypesAndUtil/businessDataObject.ts` (lines 60-79) | BDO type definitions; `userDefinedFields` interface |
 | `__tests__/jsonata/inboundJsonata.engine.spec.ts` | Worked example of input → output, useful as test fixture and field-name reference |
 
-Local clone path: `~/Documents/Documents-Isaiah-Work-Macbook-Pro/GitHub/netsuite-connector/FileCabinet/SuiteApps/com.orderful.orderfulnetsuite/`
+Paths are relative to the SuiteApp root: `FileCabinet/SuiteApps/com.orderful.orderfulnetsuite/` inside the `netsuite-connector` repo.
 
 ## Worked end-to-end example
 
