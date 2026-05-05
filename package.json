@@ -9,7 +9,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "dotenv": "^16.4.5",
+    "dotenv": "^17.4.2",
     "oauth-1.0a": "^2.2.6"
   },
   "devDependencies": {
