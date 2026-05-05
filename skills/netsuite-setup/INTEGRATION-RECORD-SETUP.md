@@ -35,10 +35,37 @@ In the customer's NetSuite:
 2. Fill in:
    - **Application Name**: select the integration record you just created.
    - **User**: the NetSuite user whose permissions the token will use. For onboarding, this is typically an admin user or a dedicated onboarding user.
-   - **Role**: a role on that user that has sufficient permissions. Administrator works but is often overkill; a custom role with "REST Web Services" and "Log in using Access Tokens" permissions plus read access to transactions/items/customers is ideal. Orderful does not ship a recommended role — use Administrator if you're unsure and it's for short-term onboarding access.
+   - **Role**: a role on that user that has sufficient permissions (see [Required role permissions](#required-role-permissions) below). Administrator works out of the box and is fine for short-term onboarding access. A custom role is preferred for ongoing/production use.
    - **Token Name**: auto-generated is fine, or customize.
 3. **Save**.
 4. NetSuite will show you the **Token ID** and **Token Secret** **once**. Copy both into the `.env` file immediately — use `NS_SB_TOKEN_ID` / `NS_SB_TOKEN_SECRET` for a sandbox account, or `NS_PROD_*` for production.
+
+## Required role permissions
+
+The role on the access token needs all of these. Set on **Setup > Users/Roles > Manage Roles > [role] > Permissions**:
+
+| Tab | Permission | Level | Why |
+|---|---|---|---|
+| Setup | Log in using Access Tokens | Full | Required for any TBA call |
+| Setup | REST Web Services | Full | Required to hit `/services/rest/*` (SuiteQL, RESTlets, record API) |
+| Setup | SuiteScript | Full | Required to execute the SuiteApp's RESTlets (e.g., agent-write) |
+| Setup | SuiteScript Scheduling | (no level — just add the row) | Required for skills that submit MapReduce jobs via `task.create()` (`/run-poller`, `/reprocess-transaction`). Without this, the RESTlet returns `INSUFFICIENT_PERMISSION` |
+| **Lists** | **Custom Record Entries** | **Edit** | **Required to load/save the SuiteApp's custom records** (e.g., `customrecord_orderful_transaction`). Their access type is `CUSTRECORDENTRYPERM`, which checks this generic Lists permission — *not* the per-record-type entries on the Custom Record subtab, *not* the custom record's own Permissions tab. **Most-commonly-missed permission.** Failure manifests as `INSUFFICIENT_PERMISSION ... custom record type Orderful Transaction` |
+| Lists | Documents and Files | Full | The SuiteApp reads/writes EDI payloads to the File Cabinet |
+
+Plus any record-level read/write permissions the customer's onboarding scope requires (Transactions, Items, Customers, etc.). When in doubt, copy permissions from a working customer's role or start from Administrator and prune.
+
+If the access token already exists and you only need to update permissions, edit the role directly — the token doesn't need to be regenerated. Permission changes typically take effect immediately, but allow ~5 minutes if a retest still fails.
+
+### Why the Custom Record Entries gotcha
+
+NetSuite custom records have an **Access Type** setting that controls how permissions are evaluated. The Orderful SuiteApp's records ship with `Require Custom Record Entries Permission` (SDF: `CUSTRECORDENTRYPERM`). Under this mode:
+
+- ✅ The role's generic **Custom Record Entries** permission (Lists tab) is checked
+- ❌ Per-record-type entries on the role's **Custom Record** subtab are ignored
+- ❌ The custom record's own **Permissions** tab is ignored
+
+It's a quirk of NetSuite's permission model. The natural place to grant access — adding "Custom Record: Orderful Transaction" with Edit on the role's Custom Record subtab — is exactly the wrong place. Always use the Lists subtab's "Custom Record Entries" entry instead.
 
 ## Step 3 — Verify
 
