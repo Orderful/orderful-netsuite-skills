@@ -119,3 +119,4 @@ Administrator already has all three. Custom roles often have the SuiteScript per
 - Status filter logic (which statuses the MR's bulk pass excludes): `Repositories/orderful_transaction.repository.ts` → `queryPendingInboundOrderfulTransactions`
 - Custom record schema: [`reference/record-types.md`](../../reference/record-types.md) §`customrecord_orderful_transaction`
 - Companion skill: [`/run-poller`](../run-poller/SKILL.md) — triggers the same MR but for *all* pending transactions, not a single one
+- Companion skill: [`/reconcile-860-with-so`](../reconcile-860-with-so/SKILL.md) — when reconciling change orders against open Sales Orders across an ERP cutover, that skill identifies which `customrecord_orderful_transaction` rows (if any) need reprocessing through this one
