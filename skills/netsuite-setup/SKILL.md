@@ -123,3 +123,48 @@ Once all three validations pass:
 - Offer next steps: "Want me to run the audit/inventory skill against this customer now, or are we done for today?"
 
 Keep the summary short — the user already knows what they did.
+
+## ISA conventions and test-injection prerequisites (FYI)
+
+The five NetSuite credentials and the Orderful API key are everything this skill needs to validate. But there are two pieces of customer-record state that come up later — once you start running test injections from sandbox via the `inject-test-transaction` skill — and they're worth flagging during onboarding so the eventual setup is straightforward.
+
+### Live vs test ISAs
+
+Every Orderful trading-partner relationship has both a `liveIsaId` and a `testIsaId` per side (sender and receiver). By convention, the test ISA is the live ISA with a `T` or `QT` suffix:
+
+| Live | Test |
+|---|---|
+| `4166619606` | `4166619606T` |
+| `4253138601CH` | `4253138601CHQT` |
+| `5146366668` | `5146366668T` |
+
+**ISA collision** is when `liveIsaId === testIsaId` on a relationship — i.e., the customer (or their counterparty) hasn't bothered to set up a distinct test ISA. When this happens, the SuiteApp can't tell from the ISA alone whether an inbound transaction is LIVE or TEST. It still works (the SuiteApp falls back to the `stream`/`testmode` flag in the payload), but you've removed a layer of defense and made routing audits harder. Surface ISA collisions to the user during onboarding if you spot them.
+
+### Customer-record fields
+
+In the customer's NetSuite, two fields on the Customer (Sub-Customer) record carry the ISAs:
+
+- `custentity_orderful_isa_id` — the **live** ISA. Always set during onboarding; the SuiteApp uses it for normal LIVE-stream traffic.
+- `custentity_orderful_isa_id_test` — the **test** ISA. Often left blank or copied from the live field (which causes problems during sandbox testing).
+
+**For sandbox test injections to work end-to-end, `custentity_orderful_isa_id_test` must match the relationship's `sender.testIsaId`.** If the values differ, the SuiteApp polls the test transaction successfully but fails to resolve it back to a NS customer — and the test fails for the wrong reason, which is hard to diagnose.
+
+This isn't something the `netsuite-setup` skill writes — it's part of customer-record EDI configuration, handled by the `enable-customer` skill or via the SuiteApp UI. Just know that if you're about to run a test injection and the customer's test_isa is wrong, the inject-test-transaction skill will catch it and propose a fix.
+
+### Polling-bucket pairs
+
+Each Artika-style customer with separate sandbox and prod NetSuite instances has **two polling buckets** in Orderful — one per environment. The sandbox NS polls bucket A; the prod NS polls bucket B. They must be distinct, and TEST-stream traffic must route to the sandbox bucket — otherwise a TEST injection meant for sandbox can land in the prod NS via the prod bucket.
+
+Per-receiver-account settings in Orderful determine which bucket TEST traffic goes to. When a customer has multiple receiver accounts (multiple subsidiaries — e.g., `Artika 4166 CA`, `Artika 5146 US`), each one's poller assignment is configured separately. It's easy to fix one and forget the others.
+
+The `.env` template now includes optional `ORDERFUL_POLLING_BUCKET_SANDBOX` and `ORDERFUL_POLLING_BUCKET_PROD` fields. Capture both during onboarding when known — the inject-test-transaction skill uses them as a tripwire to abort if the test transaction lands in the prod bucket.
+
+### When this matters for onboarding
+
+You don't need to fill any of this in to validate credentials in Step 5. But if the user's stated goal is "set up so we can do test injections," gather:
+
+- The relationship's test ISA on the partner side (e.g., for Costco → Artika 850, the sender testIsaId)
+- The customer's `custentity_orderful_isa_id_test` value (and confirm it matches the above)
+- Both polling bucket ids
+
+Hand off to `enable-customer` for the customer-record wiring and `inject-test-transaction` for the actual test runs.
