@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Orderful, Inc.
 // Read or write the singleton Orderful Feature Flags record.
 //
 // Usage:
