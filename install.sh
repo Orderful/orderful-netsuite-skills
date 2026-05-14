@@ -5,7 +5,7 @@
 #
 # What this does:
 #   1. Symlinks each skills/<name> directory to ~/.claude/skills/<name>
-#   2. Runs `npm install` to fetch deps used by samples/ and skills/netsuite-setup/test-connections.mjs
+#   2. Runs `pnpm install` to fetch deps used by samples/ and skills/netsuite-setup/test-connections.mjs
 #   3. Creates ~/orderful-onboarding/ for per-customer .env files
 #
 # Symlinks (not copies) so a `git pull` in this repo updates your installed
@@ -54,21 +54,22 @@ if [ "${#linked_skills[@]}" -eq 0 ]; then
   exit 1
 fi
 
-# ─── 2. Install npm dependencies ──────────────────────────────────────────────
-header "Installing npm dependencies (oauth-1.0a, dotenv)"
+# ─── 2. Install pnpm dependencies ─────────────────────────────────────────────
+header "Installing pnpm dependencies (oauth-1.0a, dotenv)"
 
-if ! command -v npm >/dev/null 2>&1; then
-  err "npm not found — install Node.js 20+ from https://nodejs.org and re-run"
-  info "  Skills are linked but samples/ and the setup validation script won't work without npm install"
+if ! command -v pnpm >/dev/null 2>&1; then
+  err "pnpm not found — install pnpm 11 (e.g. \`corepack enable pnpm\` on Node 24+) and re-run"
+  info "  See https://pnpm.io/installation for alternatives"
+  info "  Skills are linked but samples/ and the setup validation script won't work without pnpm install"
   exit 1
 fi
 
 if [ ! -d "${SCRIPT_DIR}/node_modules" ] || [ "${SCRIPT_DIR}/package.json" -nt "${SCRIPT_DIR}/node_modules" ]; then
-  if (cd "${SCRIPT_DIR}" && npm install --silent --no-audit --no-fund >/dev/null 2>&1); then
+  if (cd "${SCRIPT_DIR}" && pnpm install --silent >/dev/null 2>&1); then
     ok "deps installed"
   else
-    err "npm install failed. Run it manually to see the error:"
-    info "  cd ${SCRIPT_DIR} && npm install"
+    err "pnpm install failed. Run it manually to see the error:"
+    info "  cd ${SCRIPT_DIR} && pnpm install"
     exit 1
   fi
 else
