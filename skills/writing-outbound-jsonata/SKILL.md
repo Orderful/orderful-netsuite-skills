@@ -233,7 +233,23 @@ Once VALID, summarize for the user:
 - **The transform applied but Orderful's display doesn't show the field.** Compare against the NS-saved message (`custrecord_ord_tran_message`) — Orderful strips display-only nulls and certain fields it deems redundant. The data was sent; Orderful is just hiding it on the way back.
 - **The SuiteApp errored before JSONata ran with "None of the following item fulfillments have cartons".** This is a pre-JSONata check in the 856 generator. Cartons must come from either `customrecord_orderful_carton` OR a configured analytics dataset. If the user changed their packing setup, verify the dataset still returns cartons for the IF in question.
 
+## Real-world example: AAFES DSCO 810 deviations (RuffleButts, May 2026)
+
+AAFES via DSCO (guideline 146865) is strict on 810 invoices — extra fields cause rejection. Isaiah's JSONata v2 handles these deviations:
+
+| Deviation | JSONata action |
+|-----------|---------------|
+| `referenceInformation` (PO/VN/CO qualifiers) | Drop entirely — not allowed on DSCO 810 |
+| `N1_loop` | Keep ST (Ship-To) only — drop BT/SF/RI party loops |
+| `IT1.basisOfUnitPriceCode` | Remap WE → QT |
+| `SAC_loop` (Service/Allowance/Charge) | Drop entirely — H850 not allowed; AAFES is merchant of record, no freight passthrough |
+
+The pattern here is **subtraction, not addition**: the partner spec is narrower than the SuiteApp's default output. The JSONata removes fields/loops that the default mapper includes but the partner rejects. This is common with strict partners — always compare the default output against the partner's published guideline to identify what needs to be dropped.
+
+**Before writing any JSONata for a strict partner, audit `/v2/rules` first** — see [`audit-rules`](../audit-rules/SKILL.md). Rules can silently strip segments and confuse debugging.
+
 ## Reference material
 
 - [`reference/outbound-jsonata.md`](../../reference/outbound-jsonata.md) — full reference: input/context variables, the wrapped-envelope pattern, transform operator semantics, registered SuiteQL functions, common Orderful JSON field names, schema gotchas, and an annotated worked-example expression covering N1 / TD1 / TD5 / REF / LIN.
 - [`reference/record-types.md`](../../reference/record-types.md) — schema for `customrecord_orderful_edi_customer_trans` (where the JSONata field lives), `customrecord_orderful_transaction` (the saved-message field), and related records.
+- [`reference/aafes-dsco.md`](../../reference/aafes-dsco.md) — AAFES DSCO reference: 3 EDI paths, transaction set, 850 structure, 856/810 requirements, compliance/chargebacks.

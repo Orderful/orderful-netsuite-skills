@@ -23,7 +23,9 @@ Guide the user through configuring a NetSuite **parent customer** and its **subc
 **Out of scope** (do not attempt):
 - Creating customers or subcustomers — the SuiteApp does **not** create either. If the inbound N1*ST doesn't match a subcustomer, the Sales Order falls back to the parent customer; no record is created automatically. Flag missing subcustomers in the report; don't create them.
 - Deleting Enabled Transaction records or clearing fields.
-- Configuring advanced flags: `isProcessAsCustom`, consolidation method, JSONata advanced mapping, 860 change rules, 810 source type. Leave defaults; the user tunes these later by hand.
+- Configuring advanced flags: `isProcessAsCustom`, consolidation method, JSONata advanced mapping, 860 change rules, 810 source type. Leave defaults; the user tunes these later by hand. **Exception:** For P2P (Procure-to-Pay) flows where the customer sends outbound 850s, every ECT record must have `isProcessAsCustom = T` since the native SuiteApp logic does not handle P2P. See `reference/ndcinc-p2p.md`.
+
+**P2P vendor entity gap:** The SuiteApp's `custentity_orderful_*` fields (ISA ID, subcust_rep, shipto_n1_id) only exist on **Customer** entity records in NetSuite. P2P customers where the trading partner is a **Vendor** (e.g., MARS buys from NDC) have a fundamentally different NS data model. This skill does not cover Vendor entity configuration. If the trading partner is a Vendor, flag this gap and note that custom fields on the Vendor record may need to be created manually. See `reference/ndcinc-p2p.md` lesson #9.
 
 ## Prerequisites
 
