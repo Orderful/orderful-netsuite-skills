@@ -37,7 +37,7 @@ The user must have run [`netsuite-setup`](../netsuite-setup/SKILL.md) for the cu
 Before iterating, get clarity on:
 
 1. **The failing transaction.** Either the NS internal id of the `customrecord_orderful_transaction` row OR the Orderful transaction id. We need both sides to compare what was sent vs. what was rejected.
-2. **The trading partner's validation errors.** Orderful's `/v3/transactions/{id}/validation-errors` endpoint returns 404 — the API does not expose per-error details. Get the user to **screenshot the Errors tab from the Orderful UI** for that transaction, OR list the errors verbatim. Without this, you're guessing structurally.
+2. **The trading partner's validation errors.** Use the [`fetch-validations`](../fetch-validations/SKILL.md) skill — it queries the same internal endpoint the Orderful UI Rules Editor uses (`GET /v2/organizations/{org}/transactions/{tx}/validations`) and returns deduplicated structured errors with `dataPath`, `message`, and `allowedValues`. Faster than screenshotting and the output is directly usable below in Step 2. (Auth is a UI session JWT captured from a HAR; lifetime ~24h.) Falling back to a screenshot of the Orderful UI's Errors tab also works if the user prefers, but the fetch path is normally faster.
 3. **The customer × document-type ECT record id.** Query (substitute the customer NS id and document-type display name):
    ```sql
    SELECT id, custrecord_edi_enab_jsonata,
@@ -89,6 +89,32 @@ Common gotchas (real ones from production):
 | Element is mandatory | The SuiteApp leaves it null/absent. Set it from a custom field, a SuiteQL lookup, or a hardcoded value. |
 | `must NOT have additional properties - <field>` | This is *Orderful's* schema rejecting the payload before sending. The field name is wrong — find the right Orderful JSON field name in the existing message structure (e.g. `unitOrBasisForMeasurementCode`, not `unitOfMeasureCode`). |
 | Validation error nests under a different path than expected | The Orderful UI's Rules Editor shows the *normalized* path. JSONata's path is one level deeper — look at the actual NS-saved message to find the real nesting. Example: `purchaseOrderTypeCode` lives on `HL_loop[<O>].purchaseOrderReference[0]`, NOT on `beginningSegmentForShipNotice[0]`. |
+| Same segment, different schema at different HL levels | Some partners encode different rules for the *same* segment depending on which HL it's in. Sally's 856 TD5 is the canonical example: at the Shipment HL it expects TD502/TD503/TD505 (SCAC qualifier + code + carrier routing); at the Order HL it expects only TD506 (`shipmentOrderStatusCode: "CL"` or `"PR"` — order completion). Putting Shipment-shaped TD5 at the Order HL fires "Segment is mandatory" because the actual required field (TD506) is missing. Always check whether per-HL rule variants exist before assuming the segment shape is uniform. |
+| Empty arrays trigger rejection at strict validators | The SuiteApp emits some optional segments as `[]` empty arrays (e.g. `referenceInformation: []` at Pack HL, `N1_loop: []` at 856 Order HL, `SAC_loop: []` on 810 when no discount). Strict schemas (Ulta in particular) reject empty array keys as malformed. Either drop the key entirely (`~> | path | {}, ['emptyKey'] |`) or populate it with a valid entry. |
+| Mosaic JSON field naming for repeated UOM elements | Composite segments with multiple "Unit Or Basis for Measurement Code" elements (PAL, TD1) follow occurrence-order numbering. For PAL: `unitOrBasisForMeasurementCode` (no suffix) = PAL06 / unit weight UOM (often unused); `unitOrBasisForMeasurementCode1` = PAL10 / UOM for L/W/H (required when length is present); `unitOrBasisForMeasurementCode2` = PAL12 / UOM for grossWeightPerPack. The numbering counts occurrences, not positions — verify against the live message before authoring. |
+
+### Step 2.5 — Know what's in your input context (per document type)
+
+The JSONata input root is not the same across document types. Confirmed shapes:
+
+- **Outbound 855** (from SO): `salesOrders[]` populated with the source SO and its line items; `customer` populated; `itemFulfillments[]` and `invoices[]` empty.
+- **Outbound 856** (from IF): `itemFulfillments[]` populated; `customer` populated; **`salesOrders[]` is empty** even though the IF was created from an SO. (This is a SuiteApp gap — see NS-942 in the product backlog.) `itemFulfillments[0].salesOrderId` is *also* not exposed despite being on the IF model — see NS-943.
+- **Outbound 810** (from Invoice): `invoices[]` populated; `customer` populated; `salesOrders[]` and `itemFulfillments[]` empty.
+
+When the document type is 856 and you need SO custbody fields (e.g. `custbody_orderful_edi_po_date`, `custbody_orderful_latest_delivery`), the workaround is `$lookupSingleSuiteQL` joining `transactionline.createdfrom` (with `mainline = 'T'`):
+
+```jsonata
+$ifId := $string(itemFulfillments[0].id);
+$soRow := $lookupSingleSuiteQL(
+  "SELECT t.custbody_orderful_edi_po_date AS po_date "
+  & "FROM transactionline tl "
+  & "INNER JOIN transaction t ON tl.createdfrom = t.id "
+  & "WHERE tl.transaction = " & $ifId & " AND tl.mainline = 'T'"
+);
+$poDateStr := $soRow.po_date;
+```
+
+**Important**: `createdfrom` is a column on `transactionline` (with `mainline = 'T'` to get the header line), NOT on `transaction`. Trying `SELECT createdfrom FROM transaction` errors with "Field 'createdfrom' for record 'transaction' was not found". This wastes 30+ minutes the first time you hit it.
 
 ### Step 3 — Write the JSONata transform
 
