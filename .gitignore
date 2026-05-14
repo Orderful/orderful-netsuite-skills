@@ -5,6 +5,12 @@ vendor/
 __pycache__/
 *.pyc
 
+# pnpm
+pnpm-debug.log*
+
+# Prevent accidental npm lockfile re-creation
+package-lock.json
+
 # Build outputs
 dist/
 build/
