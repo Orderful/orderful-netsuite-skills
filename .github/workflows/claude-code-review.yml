@@ -1,0 +1,93 @@
+name: Claude Code Review
+
+on:
+    pull_request_target:
+        types: [labeled]
+
+concurrency:
+    group: claude-review-${{ github.event.pull_request.number }}
+    cancel-in-progress: false
+
+jobs:
+    review:
+        if: |
+            github.event.label.name == 'claude-review' &&
+            github.event.pull_request.draft == false &&
+            !endsWith(github.event.pull_request.user.login, '[bot]')
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        permissions:
+            contents: read
+            pull-requests: write
+
+        steps:
+            - name: Remove review label (idempotent re-trigger)
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  REPO: ${{ github.repository }}
+              run: gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "claude-review" || true
+
+            - name: Checkout base (trusted)
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              with:
+                  persist-credentials: false
+
+            - name: Checkout PR head into subdirectory (untrusted)
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              with:
+                  ref: ${{ github.event.pull_request.head.sha }}
+                  fetch-depth: 0
+                  path: pr-head
+                  persist-credentials: false
+
+            - name: Strip PR-controlled Claude config from pr-head
+              run: |
+                  set -euo pipefail
+                  # Fail closed if the PR pre-staged a quarantine path. Defends against
+                  # the precreated-destination nesting trick and `mv`-follows-symlink
+                  # attacks that the previous rename-based step was vulnerable to.
+                  if [ -e pr-head/.claude.pr-untrusted ]; then
+                    echo "::error::pr-head contains a pre-existing .claude.pr-untrusted path"
+                    exit 1
+                  fi
+                  # Hard-delete every PR-controlled auto-discovery path under pr-head:
+                  # top-level and nested .claude/, .claude.local/, CLAUDE.md, CLAUDE.local.md.
+                  # find without -L does not traverse symlinks; -depth removes children
+                  # before parents so symlinked-out targets aren't followed.
+                  find pr-head -depth \
+                    \( -name '.claude' -o -name '.claude.local' -o -name 'CLAUDE.md' -o -name 'CLAUDE.local.md' \) \
+                    -exec rm -rf -- {} +
+                  echo "Stripped all PR-controlled Claude config paths from pr-head."
+
+            - name: Run Claude Code Review
+              uses: anthropics/claude-code-action@86eb26bf0139bdd75acd15ea5f00f45ee0a284c2 # v1.0.122
+              env:
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  REPO: ${{ github.repository }}
+                  PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  BASE_SHA: ${{ github.event.pull_request.base.sha }}
+              with:
+                  claude_code_oauth_token: ${{ secrets.ORDERFUL_BOT_CLAUDE_CODE_OAUTH_TOKEN }}
+                  use_sticky_comment: true
+                  include_fix_links: false
+                  prompt: |
+                      Invoke Skill(code-review) with args "--pr ${{ github.event.pull_request.number }} --comment".
+                  claude_args: |
+                      --max-turns 50
+                      --model opus[1m]
+                      --fallback-model sonnet
+                      --effort medium
+                      --add-dir pr-head
+                      --allowedTools "Read,Write,Edit,Glob,Grep,Task,Bash(gh pr view:*),Bash(gh api:*),Bash(jq:*),Bash(gh pr comment:*),Bash(gh pr review:*)"
+
+            - name: Post failure notice
+              if: failure() || cancelled()
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  REPO: ${{ github.repository }}
+                  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+              run: |
+                  gh pr comment "$PR_NUMBER" --repo "$REPO" --body "<!-- orderful-claude-review-failure -->
+                  Automated Claude review did not complete. See [run logs]($RUN_URL). Re-apply the \`claude-review\` label to retry."
