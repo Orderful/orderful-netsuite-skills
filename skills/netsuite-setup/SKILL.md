@@ -168,3 +168,47 @@ You don't need to fill any of this in to validate credentials in Step 5. But if 
 - Both polling bucket ids
 
 Hand off to `enable-customer` for the customer-record wiring and `inject-test-transaction` for the actual test runs.
+
+## Known issue: SuiteTax + REST PATCH on transactions
+
+If the customer's NetSuite account has **SuiteTax** enabled (the newer tax framework, not legacy "Standard Tax"), `PATCH` requests against `/services/rest/record/v1/salesOrder/{id}` and other transaction record endpoints fail with:
+
+```
+HTTP 400
+{
+  "title": "Bad Request",
+  "status": 400,
+  "o:errorDetails": [{
+    "detail": "Error while accessing a resource. Unable to save the transaction due to an error being reported by the tax calculation engine: A User Error Has Occurred: You have entered an Invalid Field Value salesorder for the following field: type.",
+    "o:errorCode": "USER_ERROR"
+  }]
+}
+```
+
+This is a known incompatibility between SuiteTax and the REST record API. SuiteTax's calculation step rejects the lowercase REST API record-type literal (`salesorder`) because it expects the internal type code (`SalesOrd`). It blocks every PATCH on transactions, even harmless custom-column updates, even with `taxDetailsOverride: true`. The async PATCH (`Prefer: respond-async`) returns HTTP 202 + `progress: succeeded`, but the underlying task result body is the same 400 — the async wrapper hides the failure unless you fetch `/job/{n}/task/{n}/result`.
+
+### Diagnostic checklist
+
+If a contributor reports this error and asks you to "find the offending script":
+1. Look at user-event scripts deployed on `salesorder` (`SELECT s.scripttype, s.name FROM script s JOIN scriptdeployment sd ON sd.script = s.id WHERE sd.recordtype = 'SALESORDER'`). Almost always you'll find none that are tax-related.
+2. Look at `plugintypeimpl` and `plugintype`. If both are empty, there's no custom Tax Engine Plugin — the error is from SuiteTax core.
+3. Look for installed bundles named Avalara/Vertex/Sovos. If none, it's SuiteTax core (not a third-party SuiteApp).
+
+The error wording "tax calculation engine" misleads — it's not a custom plugin issue, it's the SuiteTax framework itself.
+
+### Workarounds
+
+In rough order of preference:
+
+1. **Use `record.submitFields` via the agent-write RESTlet.** SuiteScript's `record.submitFields()` skips the full save lifecycle (no user events fire, no tax recalc), which sidesteps SuiteTax entirely. If the customer's SuiteApp version exposes a `submitFields` action on `customscript_orderful_agent_write_rl`, call it; otherwise consider a small skill PR to add the action.
+2. **Update via NS UI** for one-off fixes. Tedious for bulk work but bypasses REST.
+3. **CSV import.** For bulk field updates on existing transactions, the import framework runs through a different code path that sometimes tolerates SuiteTax better than REST. Test in sandbox first.
+4. **SOAP/SuiteTalk SOAP API.** Sometimes works where REST doesn't, but SOAP is awful and most TBA tokens aren't tested against it.
+
+**Don't** try to disable SuiteTax on the subsidiary as a "fix" — that's a tenant-wide change with massive blast radius.
+
+### What you can still do via REST when SuiteTax blocks you
+
+- Read transactions (`GET`) — never blocked.
+- Patch *non-transaction* records (customer, item, vendor, custom records, etc.) — never blocked.
+- Trigger SuiteScript actions on transactions via the agent-write RESTlet — runs server-side, doesn't touch the REST tax-calc path.
