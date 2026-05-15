@@ -24,6 +24,7 @@ Guide the user through configuring a NetSuite **parent customer** and its **subc
 - Creating customers or subcustomers — the SuiteApp does **not** create either. If the inbound N1*ST doesn't match a subcustomer, the Sales Order falls back to the parent customer; no record is created automatically. Flag missing subcustomers in the report; don't create them.
 - Deleting Enabled Transaction records or clearing fields.
 - Configuring advanced flags: `isProcessAsCustom`, consolidation method, JSONata advanced mapping, 860 change rules, 810 source type. Leave defaults; the user tunes these later by hand.
+- Setting customer-level outbound handling preferences (`custentity_orderful_poack_handling_prefs`, `custentity_orderful_asn_handling_prefs`, `custentity_orderful_inv_handling_prefs`). These gate WHEN each outbound MR fires; the skill leaves them alone but **does** report their current values in the audit and flags any unset ones. See "Post-enablement checklist" below — the invoice handling pref in particular is a footgun (it ships unset by default and silently prevents 810 outbound from ever firing).
 
 ## Prerequisites
 
@@ -51,6 +52,10 @@ Parent customer:
 - `custentity_orderful_isa_id`
 - `custentity_orderful_subcust_rep` (value: `stores` | `dcs` | unset)
 - `custentity_orderful_shipto_use_entityid` (checkbox)
+- Outbound handling preferences (read-only — surface to user, don't write):
+  - `custentity_orderful_poack_handling_prefs` — gates 855 generation
+  - `custentity_orderful_asn_handling_prefs` — gates 856 generation
+  - `custentity_orderful_inv_handling_prefs` — gates 810 generation; if unset, **810 outbound never fires** (silent failure)
 
 All subcustomers (SuiteQL: `SELECT ... FROM customer WHERE parent = <parent_internalid>`):
 - Standard: `internalid`, `entityid`, `companyname`, primary shipping address.
@@ -166,6 +171,20 @@ All writes verified.
 ```
 
 If anything fails verification, surface which field/record and leave the user to decide: re-run the skill or inspect in the NetSuite UI.
+
+## Post-enablement checklist
+
+This skill stops at writing Enabled Transaction records and the parent/subcustomer fields. Before the customer can actually exchange EDI, three customer-level outbound handling preferences need to be set on the parent — review-and-set these manually in NetSuite (or via REST PATCH) for each outbound doc type the customer will send:
+
+| Field | Gates | Default if unset |
+|---|---|---|
+| `custentity_orderful_poack_handling_prefs` | When 855 fires (auto on SO save / workflow / never) | Often null; some installs default to "auto on Sales Order save" |
+| `custentity_orderful_asn_handling_prefs` | When 856 fires (auto on IF save / workflow / never) | Often null |
+| `custentity_orderful_inv_handling_prefs` | When 810 fires (auto on Invoice creation / workflow / never) | **Null — silently prevents 810 outbound from ever firing** |
+
+The list values come from `customlist_orderful_invoice_handl_opts` (and equivalents for the other prefs). For "auto-fire on record creation" behavior (the most common setup), set them to `id 1` ("Process on invoice creation" — the customlist's first value). For customers that gate outbound via their own workflows, use `id 2` ("Custom (Manual/Workflow)").
+
+Verify post-set by saving an in-scope source record (SO / IF / Invoice) and checking that a `customrecord_orderful_transaction` row appears with the right document type and status `Pending` → `Ready To Send`. If nothing appears, the handling pref is still unset or the customer's auto-send flag on the ECT (`custrecord_edi_enab_trans_auto_send_asn`) is false.
 
 ## Troubleshooting
 
