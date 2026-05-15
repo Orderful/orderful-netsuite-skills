@@ -55,17 +55,77 @@ The connector's record of every transaction (per direction) it touches. This is 
 |---|---|---|---|
 | `custrecord_ord_tran_orderful_id` | TEXT | Orderful Transaction ID | The Orderful-side UUID. Used to cross-reference with Orderful's API / UI. |
 | `custrecord_ord_tran_document` | SELECT | Document Type | E.g. 850, 855, 856. |
-| `custrecord_ord_tran_direction` | SELECT | Direction | `Inbound` or `Outbound`. |
-| `custrecord_ord_tran_status` | SELECT | Status | E.g. `Pending`, `Processing`, `Completed`, `Failed`. |
+| `custrecord_ord_tran_direction` | SELECT | Direction | `Inbound` (value `1`) or `Outbound` (value `2`). |
+| `custrecord_ord_tran_status` | SELECT | Status | E.g. `Pending`, `Processing`, `Completed`, `Failed`, `Pending - Custom Process`, `Ready To Send`. Backed by `customlist_orderful_transaction_status` — see "Custom Process status values" below. |
 | `custrecord_ord_tran_entity` | SELECT | Entity | The customer (or vendor) on the NS side. |
 | `custrecord_ord_tran_isa_sender` | TEXT | Sender ID (ISA) | Trading partner ISA sender. |
 | `custrecord_ord_tran_receiver` | TEXT | Receiver ID (ISA) | Trading partner ISA receiver. |
 | `custrecord_ord_tran_orderful_date` | DATETIMETZ | Created Date Orderful | When Orderful received the transaction. |
 | `custrecord_ord_tran_link` | URL | View in Orderful | Direct link to the Orderful UI for this transaction. |
-| `custrecord_ord_tran_error` | TEXTAREA | Error | Surface-level error message if `status = 'Failed'`. |
+| `custrecord_ord_tran_message` | LONGTEXT | Message | Stringified JSON. Inbound: the EDI payload the SuiteApp received and converted to JSON — read this in custom inbound scripts. Outbound: the payload your custom script writes for the SuiteApp's outbound MR to POST to Orderful. |
+| `custrecord_ord_tran_error` | TEXTAREA | Error | Surface-level error message if `status = 'Failed'` or `Error`. Custom scripts must populate this on failure. |
 | `custrecord_ord_tran_inbound_transaction` | SELECT | Inbound Purchase Order | For outbound docs (e.g. 855), points at the original 850. |
 | `custrecord_ord_tran_testmode` | CHECKBOX | Test Mode | True if this came in via the test ISA. |
 | `custrecord_ord_tran_poller_id` | TEXT | Poller Bucket ID | Which Orderful polling bucket this came in on. |
+
+### Custom Process status values (`customlist_orderful_transaction_status`)
+
+When using the SuiteApp's "Process as Custom" flow (see `custom-process-transactions` skill), these are the status script IDs your code writes:
+
+| Script ID | Meaning | Set by |
+|---|---|---|
+| `transaction_status_pending_cust_process` | Inbound transaction has landed but the SuiteApp won't auto-process it because the customer's enabled-transaction record has `Process as Custom` checked. Your custom MR picks these up. | SuiteApp (on inbound) |
+| `transaction_status_ready_to_send` | Outbound transaction is ready for the SuiteApp's `customscript_orderful_outbound_sending` MR to POST to Orderful. | Your custom outbound script |
+| `transaction_status_success` | Terminal — processing succeeded. | Your custom script (after writing NS records) or the SuiteApp (after a successful POST) |
+| `transaction_status_error` | Terminal — processing failed. Error message goes in `custrecord_ord_tran_error`. | Your custom script or the SuiteApp |
+
+**Status-ID resolver** (drop into your lib file — every custom-process script needs this):
+
+```js
+function getStatusId(scriptId) {
+  const results = query.runSuiteQL({
+    query: 'SELECT id FROM customlist_orderful_transaction_status WHERE UPPER(scriptid) = ?',
+    params: [scriptId.toUpperCase()],
+  }).asMappedResults();
+  return results.length ? results[0].id : null;
+}
+```
+
+### Customer-record toggle for "Process as Custom"
+
+On the customer (or vendor) record → **Orderful EDI Customer Transactions** subtab → per enabled transaction type:
+
+- **`custrecord_edi_enab_trans_cust_process`** (CHECKBOX, label "Process as Custom") — when checked, inbound transactions of this type land at `transaction_status_pending_cust_process` instead of being auto-mapped. Outbound: also requires the handling preference to be set to **Custom (Manual/Workflow)** for the SuiteApp to wait on your script's `Ready To Send` write.
+
+### Outbound payload formats (for `custrecord_ord_tran_message`)
+
+The SuiteApp's outbound sender auto-detects which format your custom script wrote and routes accordingly.
+
+**X12 nested** (used for 810, 855, 856, 940, etc.):
+
+```json
+{
+  "sender":   { "isaId": "<COMPANY_ISA>" },
+  "receiver": { "isaId": "<PARTNER_ISA>" },
+  "type":     { "name":  "810_INVOICE" },
+  "stream":   "LIVE",
+  "message":  { "transactionSets": [ ... ] }
+}
+```
+
+**Simplified** (used for non-X12-shaped docs, e.g. 855 acknowledgments):
+
+```json
+{
+  "senderId":   "<COMPANY_ISA>",
+  "receiverId": "<PARTNER_ISA>",
+  "type":       "855_PURCHASE_ORDER_ACKNOWLEDGMENT",
+  "stream":     "LIVE",
+  "message":    { ... }
+}
+```
+
+The SuiteApp strips null values and empty collections before sending. ISA sender/receiver are required — populate them explicitly rather than relying on company-level defaults.
 
 ### Common queries
 
