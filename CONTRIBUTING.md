@@ -59,7 +59,7 @@ Force-pushing dismisses prior PR approvals — ask reviewers to re-approve after
 4. Add or update tests for your changes if applicable.
 5. Ensure all checks pass locally before pushing:
    ```bash
-   npm install && npm run lint
+   pnpm install && pnpm lint
    ```
 6. Open a pull request against `main`.
 7. Fill out the PR template completely.
@@ -82,7 +82,7 @@ Maintainers can request an automated Claude review by applying the `claude-revie
 
 ## Code Style
 
-ESLint enforces style; run npm run lint before pushing.
+ESLint enforces style; run `pnpm lint` before pushing.
 
 ## Getting Help
 
