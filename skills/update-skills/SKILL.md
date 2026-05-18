@@ -56,12 +56,32 @@ readlink ~/.claude/skills/update-skills
 
 If the repo isn't cloned anywhere, stop and direct the user to `git clone git@github.com:Orderful/orderful-netsuite-skills.git` + `./install.sh` first.
 
-### Step 2 — Branch from origin/main
+### Step 2 — Make sure your fork is set up, then branch from upstream/main
+
+Every PR should be authored by the contributor's own GitHub account, even for org members. That means working from a fork — not pushing directly to `Orderful/orderful-netsuite-skills`. This keeps the contribution flow identical for everyone (org members, contractors, external collaborators) and avoids the 403 wall that anyone outside the org would otherwise hit.
+
+This is a one-time setup per machine. Verify your remotes:
 
 ```sh
 cd <repo-path>
-git fetch origin
-git switch -c <github-username>/feat/<short-description> origin/main
+git remote -v
+# origin    https://github.com/<your-username>/orderful-netsuite-skills.git
+# upstream  https://github.com/Orderful/orderful-netsuite-skills.git
+```
+
+If `origin` still points to `Orderful/...`, run this once on this machine:
+
+```sh
+gh repo fork --remote=true
+```
+
+That forks the repo on GitHub (no-op if your fork already exists), renames the existing `origin` to `upstream`, and points `origin` at your fork.
+
+Then branch from upstream:
+
+```sh
+git fetch upstream
+git switch -c <github-username>/feat/<short-description> upstream/main
 ```
 
 Branch naming:
@@ -149,7 +169,7 @@ git commit -m "feat: <short imperative description>"
 
 Use conventional-commit prefixes: `feat:` for new skills, `fix:` for refinements, `docs:` for reference-only changes. Don't `git add -A` or `git add .` — only the files relevant to this learning.
 
-### Step 7 — Push and open PR
+### Step 7 — Push to your fork and open the PR
 
 ```sh
 git push -u origin HEAD
@@ -180,6 +200,8 @@ EOF
 )"
 ```
 
+`origin` is your fork (set up in Step 2), so the push lands there. `gh pr create --base main` auto-detects the cross-repo setup and opens the PR against `Orderful/orderful-netsuite-skills:main`, authored by your GitHub account.
+
 Surface the PR URL to the user.
 
 ### Step 8 — Watch for the auto-review verdict
@@ -192,7 +214,7 @@ The `.github/workflows/ai-review.yml` runs on every PR. Within a minute or two i
 
 ## Behaviour rules
 
-1. **Never push directly to main.** Always branch + PR. Auto-review needs to run.
+1. **Always work from a fork; never push to upstream directly.** Push your feature branch to your fork's `origin`, never to `Orderful/orderful-netsuite-skills` — even if you're an org member with write access. PRs must be authored by the contributor's own GitHub account so review attribution stays clean and the contribution flow is identical for everyone (org members, contractors, external collaborators). And never commit to `main` on any remote — always branch + PR.
 2. **One change per PR.** New skill = one PR. Update to an existing skill = another PR. Don't bundle unrelated changes.
 3. **Preserve the user's correction in the skill, not your wrong assumption.** If the user said "actually, on this customer, X" — capture X, not your prior wrong answer. The whole point is the next contractor benefits from this lesson.
 4. **Strip customer data ruthlessly.** When in doubt, abstract.
