@@ -185,6 +185,11 @@ Rithum reviews all test results. If passed, the connection moves to production. 
 6. **AAFES inventory is CSV, not 846 EDI** — simple 2-column spreadsheet upload
 7. **855 not used on DSCO** — acknowledgement is platform-level, no EDI document
 8. **Carrier for AAFES DSCO dropship** — FedEx Home Delivery (FEHD) is standard
+9. **Verify outbound comm channel before testing** — wrong AS2 destination = delivery failure even with VALID status. Confirm the relationship points to the correct DSCO/Rithum channel (e.g., "disco rhythm"), not a generic or wrong AS2 connection
+10. **870 cancellation via API** — for portal step 11, generate the 870 via Orderful API rather than building a full NS cancellation workflow. Sufficient for testing.
+11. **Returns are manual** — step 14 is handled in the DSCO UI, not via EDI return document. Don't scope return automation for DSCO dropship.
+12. **Pre-create inventory in sandbox** — NS inventory allocation is manual for EDI/dropship. Can't commit via REST API. Pre-create large quantities (999 units) so test orders proceed without manual allocation.
+13. **Audit legacy workflows** — SPS Commerce customers have active workflows that interfere with EDI orders (auto-hold, field references to missing fields, SPS integration status). Audit Workflows filtered by Transaction record type before processing.
 
 ---
 
@@ -201,8 +206,12 @@ Rithum reviews all test results. If passed, the connection moves to production. 
 ## Production Cutover Checklist
 
 - [ ] All 15 portal steps complete and verified by Rithum/retailer
+- [ ] Install SuiteApp in production NetSuite (if not already)
+- [ ] Configure production NS to match sandbox (JSONata, enabled transactions, workflows)
+- [ ] Audit and disable/scope legacy SPS Commerce workflows to exclude Orderful EDI orders
 - [ ] Switch automation jobs from Manual to Automatic schedule
 - [ ] Align job schedules with Orderful sync cadence
+- [ ] Verify outbound comm channel points to correct DSCO/Rithum AS2 destination
 - [ ] Replace "Keep In Orderful" outbound comm channel with real DSCO AS2 delivery
 - [ ] Upload full inventory (all approved UPCs, not just 3 test items)
 - [ ] Coordinate go-live date with retailer and customer

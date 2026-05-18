@@ -63,3 +63,31 @@ AAFES via DSCO rejects invoices with any extra fields. JSONata must produce exac
 ### 13. SPS CSV UPCs are corrupted by Excel
 
 Excel scientific notation truncates 13-digit UPCs. UPCs must come from NetSuite item records or the retailer's catalog file, not SPS CSV exports.
+
+### 14. Verify the outbound communication channel points to the correct AS2 destination
+
+Wrong outbound comm channel = outbound docs fail at delivery even though they pass validation. On RuffleButts, the outbound relationship was pointing to the wrong AS2 channel — Rob fixed it to the correct "disco rhythm" channel. Always verify the channel matches the DSCO/Rithum AS2 destination before outbound testing.
+
+### 15. 870 cancellations can be generated via API without building a full NS-native workflow
+
+For DSCO portal testing (step 11 — Cancel), generate the 870 cancellation via the Orderful API rather than building a NetSuite cancellation workflow. This is sufficient for portal testing and avoids over-engineering for low-frequency events.
+
+### 16. Pre-create large inventory quantities for sandbox testing
+
+NetSuite inventory allocation is manual for EDI/dropship workflows. Inventory cannot be committed via the REST API, so fulfillment stalls unless inventory is manually allocated first. Workaround: pre-create large inventory quantities (e.g., 999 units) in sandbox so test orders can proceed without manual allocation.
+
+### 17. Fulfillment behavior varies by customer — no universal automation
+
+Each customer's NS environment has different locations, workflows, and fulfillment logic. Don't assume one process works everywhere. Inspect the customer's existing workflows (especially SPS Commerce artifacts) before processing orders.
+
+### 18. Watch for legacy SPS Commerce workflows on migrating customers
+
+Customers migrating from SPS Commerce (like RuffleButts from Target) may have active SPS workflows that interfere with EDI order processing. Examples found on RuffleButts: "Set Default Order Variables" (references `shipaddressee` field), "[Sales Order] Magento Discount" (auto-sets Hold: Other), "SPS Invoice Automation Workflow" (auto-sets SPS Integration Status). These must be disabled or scoped to exclude Orderful EDI orders.
+
+### 19. Returns are manual in the DSCO UI for dropship
+
+DSCO portal step 14 (Returns) is handled manually in the UI, not via an EDI return document. Don't scope a return automation for DSCO dropship onboardings.
+
+### 20. Partial fulfillment for multi-line orders requires explicit testing
+
+DSCO portal step 12 (Multi-Line Ship) tests partial fulfillment — shipping some lines of a multi-line order. This requires the NS workflow to support partial item fulfillment, which is not always the default. Verify this works before marking testing complete.

@@ -138,6 +138,22 @@ Full E2E sandbox roundtrip achieved:
 - 856 (909413586, JSONata v6) — VALID
 - 810 (909433588, JSONata v2) — VALID
 
+### Full DSCO Portal Testing (May 18, 2026)
+
+All 15 portal steps completed with 12 DSCO test orders:
+- **850 inbound** → NetSuite sales orders created successfully
+- **856 shipment** → working after comm channel fix (was pointing to wrong AS2 destination)
+- **870 cancellation** → generated via Orderful API (not NS-native workflow)
+- **Partial fulfillment** → multi-line order partially shipped successfully
+- **810 invoice** → completed during session
+- **Returns** → handled manually in DSCO UI (no EDI return document)
+
+Partnership 153136 status: Setup=Complete, Testing=Complete, GoLive=InProgress. All 10 relationships READY. Go-live: June 15, 2026.
+
+### Communication Channel Gotcha
+
+The outbound communication channel was initially pointing to the wrong AS2 destination. Rob identified the issue and updated the relationship to the correct **"disco rhythm"** channel. Outbound testing failed at delivery until this was fixed. **Always verify the outbound comm channel matches the DSCO/Rithum AS2 destination before testing.**
+
 ## Transformation Status
 
 As of May 2026:
@@ -202,6 +218,25 @@ PATCH /v2/document-relationships/<rel_id>
 1. **856 conditional HL validation gap** — Travis Thorson (Dec 2022): direct AAFES requires Tare/Pack HL conditional validation. Not applicable to DSCO path.
 2. **GIII 846 overdue** — Production monitoring error running 6+ weeks (March–May 2026).
 3. **Amrapur 856 ASN broken** — Org hierarchy interfering with document creation (April–May 2026, unresolved).
+
+## NetSuite Workflow Conflicts (Legacy SPS Commerce)
+
+Customers migrating from SPS Commerce may have active workflows that break EDI order processing. Found on RuffleButts:
+
+| Workflow | Problem | Fix |
+|----------|---------|-----|
+| "Set Default Order Variables" | References `shipaddressee` field — if missing in sandbox, blocks all SO saves | Exclude EDI/dropship orders or add the field |
+| "[Sales Order] Magento Discount" | Auto-sets RB Status to "Hold: Other" on orders with Magento Order # | Exclude EDI orders — DSCO populates this field |
+| "SPS Invoice Automation Workflow" | Sets SPS Integration Status to "Ready" 1hr after invoice creation | Disable for Orderful customers — invoices go through Orderful, not SPS |
+
+**Lesson:** Always audit the customer's existing NS workflows before processing EDI orders. Filter Workflows by Record Type = Transaction, check for anything touching Hold/Status fields.
+
+## Inventory Allocation
+
+NetSuite inventory allocation is **manual** for EDI/dropship workflows. Cannot commit inventory via the REST API.
+
+- **Sandbox testing:** Pre-create large inventory quantities (999 units) so orders proceed without manual allocation.
+- **Production:** Customer's DC team handles allocation through their normal pick/pack/ship workflow.
 
 ## Confluence Reference
 
