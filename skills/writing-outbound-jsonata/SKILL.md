@@ -265,7 +265,23 @@ Once VALID, summarize for the user:
 - **Not every IF custbody field is SuiteQL-queryable.** Some are exposed (e.g., `custbody_shiphawk_shipping_cost`, `custbody_sps_package_data_source`); others (e.g., `custbody_if_otherrefnum`) are NOT — depends on the field's "Show in List" / searchable settings. The IF data passed into JSONata via `itemFulfillments[0]` mirrors what `selectAll()` from `transaction` returns, so anything not SuiteQL-queryable is also not in the JSONata input. When designing JSONata that reads from the IF, verify the field is queryable (`SELECT custbody_x FROM transaction WHERE id = <ifId>`) before relying on it. If not, fall back to standard NS columns (`otherrefnum`, `tranid`, `shipmethod`, etc.) or set the value on a known-queryable field via a UE script.
 - **The partner's guideline acts as an allowlist on the X12 output, not just a validator.** A field present in `$defaultValues` but missing from the X12 isn't a bug — the partner's guideline decides what reaches the output via two mechanisms: (a) **explicit deletion** — the path is in the guideline with `use: "notRecommended"` + `notes: "Intentionally left empty"`; (b) **implicit deletion** — the path simply isn't in the guideline at all (the converter strips anything the partner doesn't allowlist). Both render in the Orderful UI as a yellow strike-through indicator next to the value. Fetch the actual rules via `GET /v2/guideline-sets/{id}/guidelines?convertToOrderfulPath=true` — paths match the `dataPath` shape from validation errors. Practical implication: before writing JSONata to *remove* a SuiteApp default the partner rejects, check whether the guideline is already stripping it. Overriding fields the partner doesn't reference is harmless, but writing JSONata to delete fields the guideline already removes is wasted effort. The guideline endpoints accept the public `orderful-api-key` (no UI JWT required).
 
+## Real-world example: AAFES DSCO 810 deviations (RuffleButts, May 2026)
+
+AAFES via DSCO (guideline 146865) is strict on 810 invoices — extra fields cause rejection. Isaiah's JSONata v2 handles these deviations:
+
+| Deviation | JSONata action |
+|-----------|---------------|
+| `referenceInformation` (PO/VN/CO qualifiers) | Drop entirely — not allowed on DSCO 810 |
+| `N1_loop` | Keep ST (Ship-To) only — drop BT/SF/RI party loops |
+| `IT1.basisOfUnitPriceCode` | Remap WE → QT |
+| `SAC_loop` (Service/Allowance/Charge) | Drop entirely — H850 not allowed; AAFES is merchant of record, no freight passthrough |
+
+The pattern here is **subtraction, not addition**: the partner spec is narrower than the SuiteApp's default output. The JSONata removes fields/loops that the default mapper includes but the partner rejects. This is common with strict partners — always compare the default output against the partner's published guideline to identify what needs to be dropped.
+
+**Before writing any JSONata for a strict partner, audit `/v2/rules` first** — see [`audit-rules`](../audit-rules/SKILL.md). Rules can silently strip segments and confuse debugging.
+
 ## Reference material
 
 - [`reference/outbound-jsonata.md`](../../reference/outbound-jsonata.md) — full reference: input/context variables, the wrapped-envelope pattern, transform operator semantics, registered SuiteQL functions, common Orderful JSON field names, schema gotchas, and an annotated worked-example expression covering N1 / TD1 / TD5 / REF / LIN.
 - [`reference/record-types.md`](../../reference/record-types.md) — schema for `customrecord_orderful_edi_customer_trans` (where the JSONata field lives), `customrecord_orderful_transaction` (the saved-message field), and related records.
+- [`reference/aafes-dsco.md`](../../reference/aafes-dsco.md) — AAFES DSCO reference: 3 EDI paths, transaction set, 850 structure, 856/810 requirements, compliance/chargebacks.

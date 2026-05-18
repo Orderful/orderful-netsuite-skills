@@ -32,7 +32,9 @@ Ask the user:
 
 - **Which customer?** If existing dirs were found, list them and ask if they want to reuse one or create a new one. If creating new, ask for a slug (kebab-case, e.g., `acme-foods`, `widgetco`).
 
-**Assume sandbox.** Onboarding always starts in sandbox. The template defaults `ENVIRONMENT=sandbox` and has separate blocks for sandbox (`NS_SB_*`) and production (`NS_PROD_*`) NetSuite credentials — only prompt about production if the user explicitly says they're skipping sandbox.
+**Assume sandbox.** Onboarding usually starts in sandbox. The template defaults `ENVIRONMENT=sandbox` and has separate blocks for sandbox (`NS_SB_*`) and production (`NS_PROD_*`) NetSuite credentials — only prompt about production if the user explicitly says they're skipping sandbox.
+
+**Prod-only customers exist.** Smaller customers on lower NetSuite tiers (SuiteFoundation, Starter) may not have a sandbox environment. Ask: "Does this customer have a NetSuite sandbox, or only production?" If prod-only, set `ENVIRONMENT=production`, fill only `NS_PROD_*` fields, and ensure all testing uses Orderful's TEST stream + the SuiteApp's `custrecord_ord_tran_testmode = T` flag to isolate test data from live transactions. See `reference/ndcinc-p2p.md` for the first documented prod-only case (MARS Medical, May 2026).
 
 Do NOT ask for credential values in chat yet. We'll have the user fill them into the file directly.
 
@@ -55,7 +57,11 @@ Before the user starts filling in values, confirm (ask if unsure):
 
 - **Features enabled** in the customer's NetSuite: Setup > Company > Enable Features > SuiteCloud — "Token-Based Authentication" and "REST Web Services" must both be checked.
 - **Integration record** exists or will be created. If the user hasn't created one yet, point them to `INTEGRATION-RECORD-SETUP.md` in this skill's directory for the step-by-step.
-- **Access token** exists or will be created for a user/role with sufficient permissions. Required role permissions are listed in `INTEGRATION-RECORD-SETUP.md` ("Required role permissions" section) — note that skills that trigger MapReduce scripts (e.g. `run-poller`) need both `SuiteScript = Full` and `SuiteScript Scheduling` on the role, which Administrator has by default but custom roles often don't.
+- **Access token** exists or will be created for a user/role with sufficient permissions. Required role permissions are listed in `INTEGRATION-RECORD-SETUP.md` ("Required role permissions" section) — note that skills that trigger MapReduce scripts (e.g. `run-poller`) need both `SuiteScript = Full` and `SuiteScript Scheduling` on the role, which Administrator has by default but custom roles often don't. **For P2P customers with custom SuiteScript:** the integration role needs full permissions for creating/editing records (Item Receipts, Item Fulfillments, Vendor Bills, Purchase Orders) and executing custom scripts. Logan at MARS Medical confirmed "Full grant" for the integration role — this is the expected ask for P2P. See `reference/ndcinc-p2p.md`.
+
+**P2P custom fields:** P2P implementations typically require custom fields on NS records (e.g., EDI ack status on PO header, inventory availability on items). The customer must create these in NS before the custom scripts will work. During setup, ask whether the custom field list has been shared with the customer. If not, flag as a blocker — scripts are ready but can't run without the fields. See `reference/ndcinc-p2p.md` "Script Status" section. Note: start with the bare minimum fields (MARS Medical went from 5 fields down to 1 free-text field for 855 status after the May 14 alignment call — see lesson #21 in ndcinc-p2p.md).
+
+**Review historical records first:** Before designing the output format for any inbound doc type (vendor bills, item receipts, item fulfillments), review what the customer already has in production NS. Ask the customer for examples of historical production records (e.g., existing vendor bills from the same vendor). Match that structure rather than inventing a new format. This avoids surprises for the customer's AP/receiving team. Validated May 2026 on MARS Medical 810 Vendor Bill design.
 
 Orderful's SuiteApp does not currently ship a pre-configured integration record, so the customer must create their own.
 
