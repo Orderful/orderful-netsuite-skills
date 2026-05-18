@@ -1,0 +1,35 @@
+#!/usr/bin/expect -f
+# Drive `suitecloud account:setup` so the user only completes the browser OAuth.
+# Usage: ./sdf_setup.exp <authid-name>
+#
+# Why: account:setup is interactive — it prompts for the auth-id name (text input),
+# then opens a browser for OAuth, then waits for the OAuth callback. This wrapper
+# auto-selects "Create new" and types the auth-id, leaving the user only the
+# browser step.
+set authid [lindex $argv 0]
+if {$authid eq ""} {
+  puts "Usage: $argv0 <authid-name>"
+  exit 1
+}
+set timeout 600
+log_user 1
+spawn suitecloud account:setup
+
+expect {
+  -re "Select or create an authentication ID" {
+    send "\r"
+    exp_continue
+  }
+  -re "Enter an authentication ID:" {
+    send "$authid\r"
+  }
+  timeout { puts "TIMEOUT before authid prompt"; exit 1 }
+}
+
+# After authid is entered, suitecloud opens browser for OAuth and waits for callback.
+expect {
+  -re "successfully set up" { puts "\n\nSUCCESS\n"; exit 0 }
+  -re "ERROR:" { puts "\n\nERROR detected\n"; exit 1 }
+  timeout { puts "\n\nTIMEOUT — auth still pending (10min limit)"; exit 2 }
+  eof { exit 0 }
+}
