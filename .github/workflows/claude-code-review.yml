@@ -13,7 +13,9 @@ jobs:
         if: |
             github.event.label.name == 'claude-review' &&
             github.event.pull_request.draft == false &&
-            !endsWith(github.event.pull_request.user.login, '[bot]')
+            !endsWith(github.event.pull_request.user.login, '[bot]') &&
+            contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+                     github.event.sender.author_association)
         runs-on: ubuntu-latest
         timeout-minutes: 30
         permissions:
