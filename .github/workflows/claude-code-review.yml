@@ -70,6 +70,9 @@ jobs:
                   BASE_SHA: ${{ github.event.pull_request.base.sha }}
               with:
                   claude_code_oauth_token: ${{ secrets.ORDERFUL_BOT_CLAUDE_CODE_OAUTH_TOKEN }}
+                  # Bypass the Anthropic OIDC exchange, which 401s on
+                  # pull_request_target events. See anthropics/claude-code-action#713.
+                  github_token: ${{ secrets.GITHUB_TOKEN }}
                   use_sticky_comment: true
                   include_fix_links: false
                   prompt: |
