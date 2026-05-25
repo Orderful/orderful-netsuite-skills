@@ -9,13 +9,53 @@ concurrency:
     cancel-in-progress: false
 
 jobs:
-    review:
+    gate:
         if: |
             github.event.label.name == 'claude-review' &&
             github.event.pull_request.draft == false &&
-            !endsWith(github.event.pull_request.user.login, '[bot]') &&
-            contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
-                     github.event.sender.author_association)
+            !endsWith(github.event.pull_request.user.login, '[bot]')
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            pull-requests: write
+        outputs:
+            ok: ${{ steps.check.outputs.ok }}
+        steps:
+            - name: Check labeler permission
+              id: check
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  SENDER: ${{ github.event.sender.login }}
+                  REPO: ${{ github.repository }}
+              run: |
+                  set -euo pipefail
+                  # `collaborators/{user}/permission` returns 404 when the user has no
+                  # relationship to the repo. Normalise that to "none" so the deny
+                  # branch always has a usable string. Effective permission resolves
+                  # team-derived grants server-side.
+                  perm=$(gh api "repos/$REPO/collaborators/$SENDER/permission" --jq '.permission' 2>/dev/null || echo none)
+                  case "$perm" in
+                      admin|maintain|write) ok=true ;;
+                      *)                    ok=false ;;
+                  esac
+                  echo "labeler=$SENDER permission=$perm ok=$ok"
+                  echo "ok=$ok" >> "$GITHUB_OUTPUT"
+
+            - name: Deny + cleanup when labeler lacks Write
+              if: steps.check.outputs.ok != 'true'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  REPO: ${{ github.repository }}
+                  SENDER: ${{ github.event.sender.login }}
+              run: |
+                  gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "claude-review" || true
+                  gh pr comment "$PR_NUMBER" --repo "$REPO" --body "<!-- orderful-claude-review-denied -->
+                  🚨 Claude Code review was denied. @$SENDER has insufficient repo access. The label has been removed."
+
+    review:
+        needs: gate
+        if: needs.gate.outputs.ok == 'true'
         runs-on: ubuntu-latest
         timeout-minutes: 30
         permissions:
