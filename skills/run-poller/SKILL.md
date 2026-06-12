@@ -63,7 +63,15 @@ A successful response looks like:
 - `taskId` is the NetSuite task scheduler ID for the running MapReduce
 - `mrStatus.status` will be `PENDING`, `PROCESSING`, `COMPLETE`, or `FAILED` — `PENDING`/`PROCESSING` is normal; the task continues server-side after this skill returns
 
-To verify execution, have the user check NetSuite: **Customization > Scripting > Script Deployments > "Orderful | Polling Inbound Transactions" > Execution Log**.
+To verify execution, hand the `taskId` to [monitor-mr](../monitor-mr/SKILL.md):
+
+```bash
+node skills/monitor-mr/monitor-mr.mjs <customer-dir> watch --flow inbound-polling --task <taskId>
+```
+
+It blocks until the task completes, surfaces the execution log (including the end-of-run SUMMARY with `mapErrors`/`reduceErrors`), and flags the chained processing run. Manual fallback: NetSuite UI **Customization > Scripting > Script Deployments > "Orderful | Polling Inbound Transactions" > Execution Log**.
+
+Heads-up when verifying downstream: the chained inbound-processing run skips OTs modified <10 minutes ago, so transactions polled just now typically process on a *later* scheduled cycle — or immediately via [reprocess-transaction](../reprocess-transaction/SKILL.md) for a specific id. See [reference/mapreduce-monitoring.md](../../reference/mapreduce-monitoring.md).
 
 ### Required role permissions
 
@@ -89,7 +97,7 @@ Administrator already has all four. Custom roles commonly ship with the first tw
 ## Behaviour rules
 
 1. **Never invoke the script without an explicit customer slug.** Ask the user which customer; don't pick one.
-2. **Don't poll for completion in this skill.** The MR is asynchronous. Return the `taskId` and let the user check the Execution Log if they want completion confirmation.
+2. **Don't poll for completion in this skill.** The MR is asynchronous. Return the `taskId` and follow through with [monitor-mr](../monitor-mr/SKILL.md) (`watch --flow inbound-polling --task <taskId>`) for completion and output verification.
 3. **If the endpoint 404s, do not retry or guess.** Report the version-mismatch fix from Step 4 and stop. Don't fall back silently to a different deploy ID.
 4. **Don't assume sandbox vs. production.** The script reads `ENVIRONMENT` from the `.env`. If the user expected production but the env says sandbox (or vice versa), ask before changing.
 5. **One customer per invocation.** No batch mode. Each customer's TBA token is per-account; running across multiple customers needs multiple invocations and is the user's call to make sequentially.
