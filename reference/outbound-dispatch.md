@@ -98,6 +98,52 @@ ORDER BY id;
 
 For each outbound ECT expected to auto-dispatch, `auto_send` should be `T`. If `process_as_custom` is `T`, this ECT bypasses native generation — records route through customer-built SuiteScript via the `PendingCustomProcess` status, separate from the dispatch path described here.
 
+## Test vs. live stream — the sandbox guard and the override that actually controls it
+
+Outbound generation defaults to the **LIVE** stream. When the SuiteApp runs in a sandbox NetSuite account, a guard rejects live transactions before they post to Orderful, writing this to `custrecord_ord_tran_error`:
+
+```
+Blocked: live transaction not sent from sandbox environment
+```
+
+So a freshly-generated outbound transaction in sandbox lands in `Error` with that message, and nothing reaches Orderful. (This is distinct from the Orderful-side rejection *"Cannot post a LIVE transaction because the relationship is in testing"* — that one fires when the message does reach Orderful but the partnership is in test.)
+
+### The field that actually flips the stream
+
+There are **two** test-related fields on the ECT (`customrecord_orderful_edi_customer_trans`), and they are not the same lever:
+
+| Field | Type | Effect on the outbound stream |
+|---|---|---|
+| `custrecord_edi_enab_trans_test` ("Test Mode" checkbox) | boolean | **Does NOT, by itself, make outbound generate as test.** Setting it `T` is not sufficient — generated rows still come out `custrecord_ord_tran_testmode = F` (live) and hit the sandbox guard. |
+| `custrecord_edi_enab_test_override` ("Setting Override") | list `customlist_orderful_setting_override`: `Yes` (id 1) / `No` (id 2) / `Default` (id 3) | **This is the lever.** Default falls through to live. Set it to **`Yes`** to force the outbound transaction to generate as test (`testmode = T`), which passes the sandbox guard and posts to Orderful's test stream. |
+
+For a sandbox account where every outbound should be test, set the override to `Yes` on each outbound ECT:
+
+```http
+PATCH /services/rest/record/v1/customrecord_orderful_edi_customer_trans/<ect_id>
+{ "custrecord_edi_enab_test_override": { "id": "1" } }
+```
+
+Confirm across all outbound ECTs:
+
+```sql
+SELECT id,
+       BUILTIN.DF(custrecord_edi_enab_trans_document_type) AS doc_type,
+       BUILTIN.DF(custrecord_edi_enab_test_override)       AS test_override,
+       custrecord_edi_enab_trans_test                      AS test_mode_checkbox
+FROM customrecord_orderful_edi_customer_trans
+WHERE custrecord_edi_enab_trans_customer = <customer_id>
+  AND custrecord_edi_enab_trans_direction = '2';
+```
+
+### Regeneration recomputes testmode — manual edits don't survive
+
+`custrecord_ord_tran_testmode` on an existing Orderful Transaction row is recomputed every time the record is (re)generated. Manually PATCHing an already-generated row to `testmode = T` will **not** make it send as test — the next dispatch (re-firing the source record's `custbody_orderful_ready_to_process_*` flag) regenerates the message and resets the stream from the ECT override. Fix the override on the ECT, then regenerate; don't edit the transaction row.
+
+### Re-triggering creates a new row, and old rows can't be deleted
+
+Re-firing the source record's ready-to-process flag does **not** reuse the existing `customrecord_orderful_transaction` row for that source + doc type — it **creates a new one** (same `custrecord_orderful_consolidation_key`, new internal id). Successive retries therefore accumulate rows. The stale ones cannot be deleted via REST (`This record cannot be deleted because it has dependent records` — the `customrecord_orderful_edi_trx_join` link). **Inactivate** them (`isinactive = true`) instead, leaving the latest successful row active.
+
 ## Source pointers
 
 | File (under `FileCabinet/SuiteApps/com.orderful.orderfulnetsuite/`) | Role |
