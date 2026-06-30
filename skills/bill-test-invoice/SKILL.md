@@ -155,7 +155,7 @@ Then poll `customrecord_orderful_transaction` filtered to `direction=2` AND doc 
 - **Display label ≠ scriptid.** "Required By Date" is `custbody_ssc_requested_date` on at least one customer (note: *requested*, not *required*). Don't assume.
 - **Setting one field unlocks another error.** The customform's mandatory-field rules apply incrementally. After patching Order Type, the next transform attempt may surface a brand new field. Loop, don't batch.
 - **The new invoice's customform is the SO's customform.** Always reset it explicitly.
-- **A successful transform doesn't guarantee 810 will fire.** The customer's `custentity_orderful_inv_handling_prefs` must be set, AND the ECT for 810 must have `auto_send_asn=T`, AND the invoice's `custbody_orderful_ready_to_process_inv` must be true. Three independent gates.
+- **A successful transform doesn't guarantee 810 will fire.** As of SuiteApp v1.22.0 there are two gates: the 810 handling preference must resolve to set (`custentity_orderful_inv_handling_prefs` on the customer, or the subsidiary default `custrecord_orderful_sub_inv_hp`) — this is now the dispatch gate — AND the invoice's `custbody_orderful_ready_to_process_inv` must be true. (Legacy: on SuiteApp < v1.22.0 there was a third gate, the ECT's `auto_send_asn=T`; v1.22.0 removed it as a gate.)
 - **Per-line transforms.** The transform endpoint takes the SO's full line set by default. To bill only some lines, pass an explicit `item.items` array in the body — but this is rare for testing; usually you want the full SO billed.
 
 ## Reference material

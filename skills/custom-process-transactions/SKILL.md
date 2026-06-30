@@ -71,6 +71,8 @@ If the user hasn't tried JSONata, redirect to `writing-inbound-jsonata` / `writi
 
 Then, on that entity's record → **Orderful EDI Customer Transactions** subtab → enable the doc type → check **Process as Custom**. This sets `custrecord_edi_enab_trans_cust_process = T`. The label says "Customer" but the same subtab + field is used for vendors.
 
+> **NS-1037 settings migration:** "process as custom" now also resolves via a 3-value override (`custrecord_edi_enab_custproc_override`, `customlist_orderful_setting_override` = Yes/No/Default) plus per-doctype subsidiary defaults (`custrecord_orderful_sub_custproc_<doctype>`, e.g. `_850` / `_855` / `_856` / `_810` / `_940` / `_943` / …), so the setting can be defaulted at the subsidiary per doc type. The legacy `custrecord_edi_enab_trans_cust_process` checkbox is the bilingual fallback only when the override is unstamped — checking it on a single ETT still works.
+
 - **Inbound result:** incoming transactions of that type now land on `customrecord_orderful_transaction` with status `transaction_status_pending_cust_process` instead of being auto-processed.
 - **Outbound result:** same subtab — set handling preference to **Custom (Manual/Workflow)** so the SuiteApp waits for your script's `Ready To Send` write instead of trying to generate the payload itself.
 

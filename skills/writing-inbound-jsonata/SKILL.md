@@ -272,7 +272,7 @@ A non-exhaustive list, but covers the cases that come up most often. Always run 
 |---|---|
 | `custentity_orderful_so_form_override` | Sets the Sales Order custom form for inbound 850s from this customer. **If the SO needs to land on a specific MHI/legacy form, this is the answer — not JSONata.** |
 | `custentity_orderful_isa_id` / `_isa_id_test` | Production / test ISA IDs the customer is identified by |
-| `custentity_orderful_inter_sender_id` | Interchange sender override |
+| `custentity_orderful_inter_sender_id` | Interchange sender override — **fallback only as of NS-1014.** The primary inbound-850 interchange-sender disambiguator is now the ETT field `custrecord_edi_enab_interchange_id`; the customer field is consulted only when the ETT field is unset. |
 | `custentity_orderful_split_by_shipto` / `_split_by_store` | Split inbound POs into multiple SOs by ship-to or store |
 | `custentity_orderful_multiple_location` | Allow a single SO to span multiple NS locations |
 | `custentity_orderful_shipmethod_static` / `_shipcarrier_static` | Static shipping method / carrier defaults |
@@ -290,6 +290,8 @@ A non-exhaustive list, but covers the cases that come up most often. Always run 
 | `custentity_orderful_del_date_source` / `_del_date_cust_source` | Where to source the scheduled delivery date from |
 | `custentity_orderful_itemship_source` / `_itemship_cust_source` | Where to source per-item ship dates from |
 | `custentity_orderful_location_sources` | Location resolution strategy |
+
+> **Note (NS-969 settings migration):** The boolean knobs above — `custentity_orderful_use_850_date`, `custentity_orderful_auto_acknowledge`, and `custentity_orderful_split_by_shipto` / `_split_by_store` — now resolve through 3-value override selects (`custentity_orderful_use_850date_override`, `_auto_ack_override`, `_split_shipto_ovrd` / `_split_store_ovrd`, backed by `customlist_orderful_setting_override` = Yes/No/Default). When the override is `Default` or unset, the value inherits from the subsidiary default (`custrecord_orderful_sub_*`). The legacy boolean is the bilingual fallback only when the override hasn't been stamped, so a raw read of the checkbox can be stale.
 
 ### Common mistakes
 
