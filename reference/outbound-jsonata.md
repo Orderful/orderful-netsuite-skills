@@ -175,6 +175,41 @@ Orderful's outbound schema uses specific field names that don't always match the
 
 When you're unsure, **read the NS-saved message first** to find the exact field name the SuiteApp uses for that element. Don't guess.
 
+## Date field format gotcha
+
+**NetSuite date fields arrive in the JSONata context as `MM/DD/YYYY` strings, not ISO (`YYYY-MM-DD`) format.**
+
+This applies to any date field read directly from a root-context variable (e.g. `salesOrders[0].custbody_promisedate`, `itemFulfillments[0].shipdate`). EDI requires dates as `YYYYMMDD`, so you must convert.
+
+### Wrong
+
+```jsonata
+/* Splitting on "-" does nothing — the date is "05/09/2026", not "2026-05-09" */
+$promiseDate := $join($split(salesOrders[0].custbody_promisedate, "-"), "")
+/* → "05/09/2026" (unchanged — no hyphens to split on) */
+```
+
+### Right — split on `/` and rearrange
+
+```jsonata
+$dateParts   := $split(salesOrders[0].custbody_promisedate, "/");
+$promiseDate := $dateParts[2] & $dateParts[0] & $dateParts[1];
+/* "05/09/2026" → parts ["05","09","2026"] → "20260509" */
+```
+
+This generalises to any `MM/DD/YYYY` date field. If single-digit months or days are possible (e.g. `"5/9/2026"`), the output (`"202659"`) will be wrong — guard with zero-padding if the partner's spec requires strictly 8 digits:
+
+```jsonata
+$pad2 := function($s) { $length($s) = 1 ? "0" & $s : $s };
+$dateParts   := $split(salesOrders[0].custbody_promisedate, "/");
+$promiseDate := $dateParts[2] & $pad2($dateParts[0]) & $pad2($dateParts[1]);
+/* "5/9/2026" → "20260509" */
+```
+
+### Dates already in `$defaultValues` are already YYYYMMDD
+
+The SuiteApp formats dates before writing them into the default message, so any date you read back from `$defaultValues.message.*` is already `YYYYMMDD`. Only dates read directly from root-context variables (SO, IF, invoice, customer fields) need conversion.
+
 ## Common SuiteQL patterns
 
 ### IF's first-line Location → main address + subsidiary legal name
