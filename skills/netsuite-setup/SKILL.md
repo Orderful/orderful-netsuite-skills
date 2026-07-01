@@ -32,7 +32,9 @@ Ask the user:
 
 - **Which customer?** If existing dirs were found, list them and ask if they want to reuse one or create a new one. If creating new, ask for a slug (kebab-case, e.g., `acme-foods`, `widgetco`).
 
-**Assume sandbox.** Onboarding always starts in sandbox. The template defaults `ENVIRONMENT=sandbox` and has separate blocks for sandbox (`NS_SB_*`) and production (`NS_PROD_*`) NetSuite credentials — only prompt about production if the user explicitly says they're skipping sandbox.
+**Assume sandbox.** Onboarding usually starts in sandbox. The template defaults `ENVIRONMENT=sandbox` and has separate blocks for sandbox (`NS_SB_*`) and production (`NS_PROD_*`) NetSuite credentials — only prompt about production if the user explicitly says they're skipping sandbox.
+
+**Prod-only customers exist.** Smaller customers on lower NetSuite tiers (SuiteFoundation, Starter) may not have a sandbox environment. Ask: "Does this customer have a NetSuite sandbox, or only production?" If prod-only, set `ENVIRONMENT=production`, fill only `NS_PROD_*` fields, and ensure all testing uses Orderful's TEST stream + the SuiteApp's `custrecord_ord_tran_testmode = T` flag to isolate test data from live transactions. See `reference/procure-to-pay.md` for the first documented prod-only case (Acme Medical, May 2026).
 
 Do NOT ask for credential values in chat yet. We'll have the user fill them into the file directly.
 
@@ -55,7 +57,11 @@ Before the user starts filling in values, confirm (ask if unsure):
 
 - **Features enabled** in the customer's NetSuite: Setup > Company > Enable Features > SuiteCloud — "Token-Based Authentication" and "REST Web Services" must both be checked.
 - **Integration record** exists or will be created. If the user hasn't created one yet, point them to `INTEGRATION-RECORD-SETUP.md` in this skill's directory for the step-by-step.
-- **Access token** exists or will be created for a user/role with sufficient permissions. Required role permissions are listed in `INTEGRATION-RECORD-SETUP.md` ("Required role permissions" section) — note that skills that trigger MapReduce scripts (e.g. `run-poller`) need both `SuiteScript = Full` and `SuiteScript Scheduling` on the role, which Administrator has by default but custom roles often don't.
+- **Access token** exists or will be created for a user/role with sufficient permissions. Required role permissions are listed in `INTEGRATION-RECORD-SETUP.md` ("Required role permissions" section) — note that skills that trigger MapReduce scripts (e.g. `run-poller`) need both `SuiteScript = Full` and `SuiteScript Scheduling` on the role, which Administrator has by default but custom roles often don't. **For P2P customers with custom SuiteScript:** the integration role needs full permissions for creating/editing records (Item Receipts, Item Fulfillments, Vendor Bills, Purchase Orders) and executing custom scripts. Jordan at Acme Medical confirmed "Full grant" for the integration role — this is the expected ask for P2P. See `reference/procure-to-pay.md`.
+
+**P2P custom fields:** P2P implementations typically require custom fields on NS records (e.g., EDI ack status on PO header, inventory availability on items). The customer must create these in NS before the custom scripts will work. During setup, ask whether the custom field list has been shared with the customer. If not, flag as a blocker — scripts are ready but can't run without the fields. See `reference/procure-to-pay.md` "Script Status" section. Note: start with the bare minimum fields (Acme Medical went from 5 fields down to 1 free-text field for 855 status after the May 14 alignment call — see lesson #21 in procure-to-pay.md).
+
+**Review historical records first:** Before designing the output format for any inbound doc type (vendor bills, item receipts, item fulfillments), review what the customer already has in production NS. Ask the customer for examples of historical production records (e.g., existing vendor bills from the same vendor). Match that structure rather than inventing a new format. This avoids surprises for the customer's AP/receiving team. Validated May 2026 on Acme Medical 810 Vendor Bill design.
 
 Orderful's SuiteApp does not currently ship a pre-configured integration record, so the customer must create their own.
 
@@ -150,9 +156,9 @@ Every Orderful trading-partner relationship has both a `liveIsaId` and a `testIs
 
 | Live | Test |
 |---|---|
-| `4166619606` | `4166619606T` |
-| `4253138601CH` | `4253138601CHQT` |
-| `5146366668` | `5146366668T` |
+| `4160000000` | `4160000000T` |
+| `4250000000CH` | `4250000000CHQT` |
+| `5140000000` | `5140000000T` |
 
 **ISA collision** is when `liveIsaId === testIsaId` on a relationship — i.e., the customer (or their counterparty) hasn't bothered to set up a distinct test ISA. When this happens, the SuiteApp can't tell from the ISA alone whether an inbound transaction is LIVE or TEST. It still works (the SuiteApp falls back to the `stream`/`testmode` flag in the payload), but you've removed a layer of defense and made routing audits harder. Surface ISA collisions to the user during onboarding if you spot them.
 
@@ -169,9 +175,9 @@ This isn't something the `netsuite-setup` skill writes — it's part of customer
 
 ### Polling-bucket pairs
 
-Each Artika-style customer with separate sandbox and prod NetSuite instances has **two polling buckets** in Orderful — one per environment. The sandbox NS polls bucket A; the prod NS polls bucket B. They must be distinct, and TEST-stream traffic must route to the sandbox bucket — otherwise a TEST injection meant for sandbox can land in the prod NS via the prod bucket.
+Each Lumina Brands-style customer with separate sandbox and prod NetSuite instances has **two polling buckets** in Orderful — one per environment. The sandbox NS polls bucket A; the prod NS polls bucket B. They must be distinct, and TEST-stream traffic must route to the sandbox bucket — otherwise a TEST injection meant for sandbox can land in the prod NS via the prod bucket.
 
-Per-receiver-account settings in Orderful determine which bucket TEST traffic goes to. When a customer has multiple receiver accounts (multiple subsidiaries — e.g., `Artika 4166 CA`, `Artika 5146 US`), each one's poller assignment is configured separately. It's easy to fix one and forget the others.
+Per-receiver-account settings in Orderful determine which bucket TEST traffic goes to. When a customer has multiple receiver accounts (multiple subsidiaries — e.g., `Lumina Brands (CA subsidiary)`, `Lumina Brands (US subsidiary)`), each one's poller assignment is configured separately. It's easy to fix one and forget the others.
 
 The `.env` template now includes optional `ORDERFUL_POLLING_BUCKET_SANDBOX` and `ORDERFUL_POLLING_BUCKET_PROD` fields. Capture both during onboarding when known — the inject-test-transaction skill uses them as a tripwire to abort if the test transaction lands in the prod bucket.
 
@@ -179,7 +185,7 @@ The `.env` template now includes optional `ORDERFUL_POLLING_BUCKET_SANDBOX` and 
 
 You don't need to fill any of this in to validate credentials in Step 5. But if the user's stated goal is "set up so we can do test injections," gather:
 
-- The relationship's test ISA on the partner side (e.g., for Costco → Artika 850, the sender testIsaId)
+- The relationship's test ISA on the partner side (e.g., for Costco → Lumina Brands 850, the sender testIsaId)
 - The customer's `custentity_orderful_isa_id_test` value (and confirm it matches the above)
 - Both polling bucket ids
 
