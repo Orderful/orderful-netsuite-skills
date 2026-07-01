@@ -23,7 +23,7 @@ Do NOT use this skill when:
 
 ## Prerequisites
 
-- Customer has an outbound 810 ECT (`customrecord_orderful_edi_customer_trans` row with document type "810 Invoice" and `auto_send_asn = T`). If not, route to [`enable-customer`](../enable-customer/SKILL.md) first.
+- Customer has an outbound 810 ECT (`customrecord_orderful_edi_customer_trans` row with document type "810 Invoice"), AND the 810 handling preference is set so dispatch is gated open — `custentity_orderful_inv_handling_prefs` on the customer (or the subsidiary default `custrecord_orderful_sub_inv_hp`). If not, route to [`enable-customer`](../enable-customer/SKILL.md) first. (Legacy: on SuiteApp < v1.22.0 the gate was `auto_send_asn = T` on the ECT instead of the handling preference.)
 - Customer's `~/orderful-onboarding/<slug>/.env` is set up via [`netsuite-setup`](../netsuite-setup/SKILL.md).
 - Source SOs are in `Pending Billing` (i.e., the Item Fulfillment has been shipped). The 856 cycle should already be complete.
 

@@ -249,6 +249,21 @@ When the SuiteApp generates an 856, it will:
 3. Apply `Fulfillment ANY_OF [ifIds]` to the dataset's existing condition
 4. Iterate the result, building cartons + packed items from the rows
 
+### Step 9 — Migrating between environments
+
+The dataset is authored in **one** NetSuite account (typically sandbox). To promote to another account (sandbox → prod, or to another customer's sandbox), don't re-author by hand — use SDF. Hand-authoring the same dataset twice drifts: column labels, filter values, joins all diverge subtly.
+
+The [`migrate-dataset`](../migrate-dataset/SKILL.md) skill covers the cross-environment promotion end-to-end:
+
+- SDF project bootstrap + auth setup (one browser flow per environment, scripted)
+- `object:import` the dataset + its translation-collection dependency from source
+- Generate a placeholder workbook that satisfies SDF's workbook-required validation (the SuiteApp doesn't use the workbook at runtime, but SDF won't deploy a dataset without one)
+- Swap the customer-ID in the entity filter for the target account (critical — otherwise the deployed dataset returns zero rows in prod)
+- Deploy + the "file upload error" gotcha (the dataset still lands even when the workbook errors)
+- Post-deploy REST: create `customrecord_orderful_pkg_data_src` row + link on the target customer's `custentity_orderful_pkg_data_src`
+
+Hand-off after Step 8 in this skill = Step 1 in `migrate-dataset`.
+
 ## Behaviour rules
 
 1. **Don't author dataset XML by hand.** SDF can validate it locally, but server-side validation rejects datasets without a referencing workbook, and authoring a stub workbook is brittle. Always build in the UI, then import.

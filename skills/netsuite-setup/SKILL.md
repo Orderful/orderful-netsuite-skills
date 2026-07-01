@@ -112,8 +112,24 @@ Common causes, check in this order:
 ### If the RESTlet check fails
 
 1. **`404 — endpoint not found`** — the customer's installed SuiteApp version predates the agent-write RESTlet (NS-926). Have them upgrade via **My SuiteApps**. Until that's done, `/run-poller` and any other agent-write skill will not work, but the rest of onboarding is unblocked.
-2. **`INSUFFICIENT_PERMISSION — missing SuiteScript permission`** — the role on the token doesn't have `SuiteScript = Full`. Add it on the role's **Setup tab** (and add `SuiteScript Scheduling` while you're there — see `INTEGRATION-RECORD-SETUP.md` "Required role permissions"). No need to regenerate the token after editing the role.
-3. **Other failure** — the script prints the raw response. If the RESTlet returned anything other than the expected "Unknown action" rejection, treat it like any other RESTlet failure and check the script execution log (Customization > Scripting > Script Deployments > "Orderful Agent Write" > Execution Log).
+
+2. **`INSUFFICIENT_PERMISSION` — "You do not have privileges to view this page"** — counter-intuitive, but this is **most often a deployment-audience issue, not a role-permission gap**. The agent-write RESTlet ships with the SuiteApp but its deployment audience is configured per-account at install time and is easy to miss. Even an `Administrator`-role token returns this error if the audience excludes the integration's user/role.
+
+    **Diagnose with SuiteQL** (via the `.env` creds, before touching any roles):
+
+    ```sql
+    SELECT sd.scriptid, sd.allroles, sd.allemployees, sd.status, sd.isdeployed
+    FROM scriptdeployment sd
+    JOIN script s ON s.id = sd.script
+    WHERE s.scriptid = 'customscript_orderful_agent_write_rl'
+    ```
+
+    - **`allroles = F` AND `allemployees = F`** → audience issue. Fix: Customization → Scripting → Script Deployments → `customdeploy_orderful_agent_write_rl` → **Edit** → **Audience** tab → check **All Roles** AND **All Employees** (broadest; matches what the SuiteApp expects for its own RESTlets), OR specifically add the integration's user + role. **Save**. Effective instantly; no token regeneration.
+    - **`allroles = T` AND `allemployees = T`** → audience isn't the cause; treat as a real role-permission gap → see #3.
+
+3. **`INSUFFICIENT_PERMISSION` after audience is ruled out** — the role on the token doesn't have `SuiteScript = Full`. Add it on the role's **Setup tab** (and add `SuiteScript Scheduling` while you're there — see `INTEGRATION-RECORD-SETUP.md` "Required role permissions"). No need to regenerate the token after editing the role.
+
+4. **Other failure** — the script prints the raw response. If the RESTlet returned anything other than the expected "Unknown action" rejection, treat it like any other RESTlet failure and check the script execution log (Customization > Scripting > Script Deployments > "Orderful Agent Write" > Execution Log).
 
 ### If Orderful fails
 

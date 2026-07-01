@@ -1,0 +1,34 @@
+# Prevent install-time script execution (relocated from .npmrc under pnpm 11).
+ignoreScripts: true
+
+# Pin all installed versions exactly (relocated from .npmrc under pnpm 11).
+saveExact: true
+
+# Explicit dependency build-script allow-list. Empty means no dependency build
+# scripts are allowed unless a future change opts them in here.
+allowBuilds: {}
+
+# Block packages published less than 3 days ago. Gives the community time to catch
+# supply-chain attacks before they can land in the project.
+# To bypass for a specific package: pnpm install --config.minimum-release-age=0
+minimumReleaseAge: 4320 # 3 days (in minutes)
+
+# Preserve pre-v11 fallback behavior when no version in range satisfies
+# minimumReleaseAge.
+minimumReleaseAgeStrict: false
+
+# Block transitive dependencies from using git repos, tarball URLs, or other
+# exotic sources. Only direct dependencies may reference non-registry sources.
+blockExoticSubdeps: true
+
+# Record exact tarball URLs in pnpm-lock.yaml for every package.
+# Makes lockfile audits more transparent and enables source verification.
+lockfileIncludeTarballUrl: true
+
+# Fail installation if a package's trust evidence (npm provenance/signatures)
+# decreases compared to what the lockfile previously recorded.
+trustPolicy: no-downgrade
+
+# semver 5.7.2 predates npm provenance. Transitive dep of @babel and other build tools.
+trustPolicyExclude:
+  - "semver"

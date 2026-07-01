@@ -38,7 +38,6 @@ Force-pushing dismisses prior PR approvals — ask reviewers to re-approve after
 - **Reference material is wrong or stale** → edit `reference/*.md`
 - **Setup instructions tripped you up** → fix `README.md` so the next person doesn't hit the same thing
 
-
 ## How to Contribute
 
 ### Reporting Bugs
@@ -60,7 +59,7 @@ Force-pushing dismisses prior PR approvals — ask reviewers to re-approve after
 4. Add or update tests for your changes if applicable.
 5. Ensure all checks pass locally before pushing:
    ```bash
-   npm install && npm run lint
+   pnpm install && pnpm lint
    ```
 6. Open a pull request against `main`.
 7. Fill out the PR template completely.
@@ -72,13 +71,18 @@ Force-pushing dismisses prior PR approvals — ask reviewers to re-approve after
 - Respond to review feedback promptly.
 - Squash merging is used by default; write a clear PR title (it becomes the commit message).
 
+### Automated review
+
+Maintainers can request an automated Claude review by applying the `claude-review` label to your PR. The bot reads the diff, applies the rubric in [`.claude/skills/code-review/SKILL.md`](.claude/skills/code-review/SKILL.md), and posts a review. Re-apply the label after pushing fixes to trigger another pass.
+
 ## Branching Model
 
 - `main` is the primary branch. All PRs target `main`.
 - Use descriptive branch names: `fix/issue-123-null-check`, `feat/add-retry-logic`, etc.
 
 ## Code Style
-ESLint enforces style; run npm run lint before pushing.
+
+ESLint enforces style; run `pnpm lint` before pushing.
 
 ## Getting Help
 

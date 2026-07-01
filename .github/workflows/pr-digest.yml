@@ -35,7 +35,8 @@ jobs:
 
             BODY=$(echo "$PRS" | jq -r '
               map({
-                number, title, url, isDraft,
+                number, url, isDraft,
+                title: (.title | gsub("[\\n\\r]"; " ") | gsub("[`*_<>]"; "")),
                 author: .author.login,
                 age_days: ((now - (.createdAt | fromdateiso8601)) / 86400 | floor),
                 approvals: ([.latestReviews[]? | select(.state == "APPROVED")] | length)

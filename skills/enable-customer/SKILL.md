@@ -1,6 +1,6 @@
 ---
 name: enable-customer
-description: Configure a NetSuite parent customer (and its subcustomers) for EDI via the Orderful SuiteApp. Audits existing Orderful Enabled Transaction records, N1 ship-to fields on subcustomers, and the parent's "subcustomers represent" setting; cross-references with Orderful partner relationships and historical 850 ship-to IDs; then guides the user through creates/updates to close any gaps. Use when the user says "enable <customer> for EDI", "set up <customer> transactions", "configure <customer> in Orderful", "add <customer> to Orderful", or is bringing a new trading partner online and needs the NetSuite side wired up. Does NOT create customers or subcustomers (the SuiteApp auto-creates subcustomers on first inbound ship-to). Does NOT delete records.
+description: Configure a NetSuite parent customer (and its subcustomers) for EDI via the Orderful SuiteApp. Audits existing Orderful Enabled Transaction records, N1 ship-to fields on subcustomers, and the parent's "subcustomers represent" setting; cross-references with Orderful partner relationships and historical 850 ship-to IDs; then guides the user through creates/updates to close any gaps. Use when the user says "enable <customer> for EDI", "set up <customer> transactions", "configure <customer> in Orderful", "add <customer> to Orderful", or is bringing a new trading partner online and needs the NetSuite side wired up. Does NOT create customers or subcustomers (the SuiteApp does not create them either — an inbound ship-to that matches no subcustomer falls back to the parent customer). Does NOT delete records.
 ---
 
 # Enable Customer: EDI Configuration for a NetSuite Customer
@@ -10,6 +10,8 @@ Guide the user through configuring a NetSuite **parent customer** and its **subc
 - A complete set of `Orderful Enabled Transaction` records matching the transaction types enabled on the Orderful partner relationship.
 - `custentity_orderful_subcust_rep` set to `stores` or `dcs`.
 - Every subcustomer that the skill can match should have `custentity_orderful_shipto_n1_id` filled in.
+
+> **Many settings can now be set as subsidiary defaults instead of per-customer.** Handling prefs, the split flags, packaging/label data source, `salesOrderFormOverride`, `subCustomersRepresentation`, and more each have a `custrecord_orderful_sub_*` field on the Subsidiary record that every (sub)customer under it inherits unless it sets a local value. For hundreds-of-subcustomers setups, set the default once on the subsidiary rather than stamping every child. See [`reference/settings-architecture.md`](../../reference/settings-architecture.md) for the full resolution chain (customer → parent → subsidiary default → hardcoded) and the field-ID tables.
 
 ## Scope
 
@@ -24,6 +26,7 @@ Guide the user through configuring a NetSuite **parent customer** and its **subc
 - Creating customers or subcustomers — the SuiteApp does **not** create either. If the inbound N1*ST doesn't match a subcustomer, the Sales Order falls back to the parent customer; no record is created automatically. Flag missing subcustomers in the report; don't create them.
 - Deleting Enabled Transaction records or clearing fields.
 - Configuring advanced flags: `isProcessAsCustom`, consolidation method, JSONata advanced mapping, 860 change rules, 810 source type. Leave defaults; the user tunes these later by hand. **Exception:** For P2P (Procure-to-Pay) flows where the customer sends outbound 850s, every ECT record must have `isProcessAsCustom = T` since the native SuiteApp logic does not handle P2P. See `reference/ndcinc-p2p.md`.
+- Setting customer-level outbound handling preferences (`custentity_orderful_poack_handling_prefs`, `custentity_orderful_asn_handling_prefs`, `custentity_orderful_inv_handling_prefs`). These gate WHEN each outbound MR fires; the skill leaves them alone but **does** report their current values in the audit and flags any unset ones. See "Post-enablement checklist" below — the invoice handling pref in particular is a footgun (it ships unset by default and silently prevents 810 outbound from ever firing).
 
 **P2P vendor entity gap:** The SuiteApp's `custentity_orderful_*` fields (ISA ID, subcust_rep, shipto_n1_id) only exist on **Customer** entity records in NetSuite. P2P customers where the trading partner is a **Vendor** (e.g., MARS buys from NDC) have a fundamentally different NS data model. This skill does not cover Vendor entity configuration. If the trading partner is a Vendor, flag this gap and note that custom fields on the Vendor record may need to be created manually. See `reference/ndcinc-p2p.md` lesson #9.
 
@@ -53,6 +56,10 @@ Parent customer:
 - `custentity_orderful_isa_id`
 - `custentity_orderful_subcust_rep` (value: `stores` | `dcs` | unset)
 - `custentity_orderful_shipto_use_entityid` (checkbox)
+- Outbound handling preferences (read-only — surface to user, don't write):
+  - `custentity_orderful_poack_handling_prefs` — gates 855 generation
+  - `custentity_orderful_asn_handling_prefs` — gates 856 generation
+  - `custentity_orderful_inv_handling_prefs` — gates 810 generation; if unset, **810 outbound never fires** (silent failure)
 
 All subcustomers (SuiteQL: `SELECT ... FROM customer WHERE parent = <parent_internalid>`):
 - Standard: `internalid`, `entityid`, `companyname`, primary shipping address.
@@ -98,6 +105,8 @@ If `custentity_orderful_subcust_rep` is unset:
 - Only allowed values: `stores`, `dcs`. Anything else → ask again.
 
 If already set, skip.
+
+> `subCustomersRepresentation` resolves **customer → parent → subsidiary default**. The customer field is `customlist_orderful_subcust_rep_opt` (exposed as `custentity_orderful_subcust_rep`); the subsidiary default is `custrecord_orderful_sub_subcust_rep`. If the parent's value is unset, the SuiteApp will inherit from the subsidiary default — so before writing it on the parent, check whether the subsidiary already supplies it (an unset parent + a populated subsidiary default is **not** a gap). See [`reference/settings-architecture.md`](../../reference/settings-architecture.md). Note: this one subsidiary default is the empty-means-"None" case (its list only has Stores/DCs).
 
 ### 3b. Ship-to N1 IDs on subcustomers
 
@@ -169,6 +178,22 @@ All writes verified.
 
 If anything fails verification, surface which field/record and leave the user to decide: re-run the skill or inspect in the NetSuite UI.
 
+## Post-enablement checklist
+
+This skill stops at writing Enabled Transaction records and the parent/subcustomer fields. Before the customer can actually exchange EDI, three customer-level outbound handling preferences need to be set on the parent — review-and-set these manually in NetSuite (or via REST PATCH) for each outbound doc type the customer will send:
+
+| Field | Gates | Default if unset |
+|---|---|---|
+| `custentity_orderful_poack_handling_prefs` | When 855 fires (auto on SO save / workflow / never) | Often null; some installs default to "auto on Sales Order save" |
+| `custentity_orderful_asn_handling_prefs` | When 856 fires (auto on IF save / workflow / never) | Often null |
+| `custentity_orderful_inv_handling_prefs` | When 810 fires (auto on Invoice creation / workflow / never) | **Null — silently prevents 810 outbound from ever firing** |
+
+The list values come from `customlist_orderful_invoice_handl_opts` (and equivalents for the other prefs). For "auto-fire on record creation" behavior (the most common setup), set them to `id 1` ("Process on invoice creation" — the customlist's first value). For customers that gate outbound via their own workflows, use `id 2` ("Custom (Manual/Workflow)").
+
+Verify post-set by saving an in-scope source record (SO / IF / Invoice) and checking that a `customrecord_orderful_transaction` row appears with the right document type and status `Pending` → `Ready To Send`. If nothing appears, the handling pref is still unset (or it resolves to "never" / a custom-process state). The handling preference is the **only** outbound gate — the ECT no longer needs an auto-send flag to dispatch, and it resolves with the full customer → parent → subsidiary-default chain (see [`reference/settings-architecture.md`](../../reference/settings-architecture.md)).
+
+> Legacy note: connector versions **< v1.22.0** required a per-ECT `auto_send_asn = T` flag to dispatch the outbound. That flag was removed in v1.22.0 — the handling preference (with subsidiary-default resolution) is now the single gate. Don't look for `custrecord_edi_enab_trans_auto_send_asn` on current installs.
+
 ## Troubleshooting
 
 - **Parent has no ISA ID**: skill can't match to Orderful. Stop; ask the user to set `custentity_orderful_isa_id` on the Customer record (NetSuite UI) and re-run.
@@ -176,6 +201,7 @@ If anything fails verification, surface which field/record and leave the user to
 - **Document Type FK resolution fails** — SuiteQL returns no row for "850" etc. in `customrecord_orderful_edi_document_type`: the SuiteApp install may be missing seed records. This is an install-level issue, not a skill issue. Stop and tell the user.
 - **403 on Enabled Transaction create/update**: the access token's role lacks create/edit permission on `customrecord_orderful_edi_customer_trans`. Have the customer grant the role the right permissions and re-run.
 - **"Parent is also a subcustomer"** edge case: if the customer the user named has a non-null `parent` field, ask whether they meant the parent instead. The skill operates on tree roots.
+- **Inbound SO has an empty shipping address even though the 850 carried a full `N1*ST`**: this is NOT a `subcust_rep` / sub-customer / ship-to config gap, and changing those settings won't fix it. `custentity_orderful_subcust_rep` (`stores`/`dcs`) only controls matching the inbound N104 against a sub-customer's `custentity_orderful_shipto_n1_id` so the SO is filed under that sub-customer — it is *not* an address lookup, and on no match the SO falls back to the parent. Separately, the SuiteApp maps `N1*ST` into its BDO correctly but the inbound SO **write step persists `billingAddress` and drops `shippingAddress`** — confirm by reading the BDO via [`inspect-inbound-diagnostics`](../inspect-inbound-diagnostics/SKILL.md) (the `Order Split` step shows `transaction.shippingAddress` fully populated while the created SO's shipping address is empty). That's a SuiteApp bug to escalate to devs, not a config change; the stopgap is to set the ship address on the IF/SO before the outbound 856.
 
 ## Dry-run mode
 

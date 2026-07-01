@@ -19,12 +19,16 @@ Skills cite shared reference material (record types, common queries, REST patter
 ### Prerequisites
 
 1. Install [Claude Code](https://www.anthropic.com/claude-code) and sign in with your work account.
-2. Install **Node.js 20 LTS or newer** — required by the validation script and `samples/`.
+2. Install **Node.js 24 LTS or newer** — required by the validation script and `samples/`.
    - macOS (Homebrew): `brew install node`
    - macOS / Linux (nvm): `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash && nvm install --lts`
    - Windows: download the LTS installer from [nodejs.org](https://nodejs.org/)
-   - Verify with `node --version` (should print `v20.x` or higher).
-3. **Git** — to clone this repo.
+   - Verify with `node --version` (should print `v24.x` or higher).
+3. Install **pnpm 11** — used to install the validation script's dependencies.
+   - Easiest path (ships with Node 24): `corepack enable pnpm`
+   - See [pnpm.io/installation](https://pnpm.io/installation) for alternatives.
+   - Verify with `pnpm --version` (should print `11.x`).
+4. **Git** — to clone this repo.
 
 ### Quick Start
 
@@ -39,7 +43,7 @@ Skills cite shared reference material (record types, common queries, REST patter
    ```
    This:
    - symlinks each skill into `~/.claude/skills/` (Claude Code auto-discovers them via frontmatter)
-   - runs `npm install` for the validation script + `samples/`
+   - runs `pnpm install` for the validation script + `samples/`
    - creates `~/orderful-onboarding/` for per-customer credentials
 3. Open Claude Code anywhere and run `/netsuite-setup`. The skill walks you through scaffolding `~/orderful-onboarding/<customer-slug>/.env` and validating both NetSuite and Orderful credentials. Repeat per customer.
 
