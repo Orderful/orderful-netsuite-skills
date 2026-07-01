@@ -76,7 +76,7 @@ This is where the real EDI connection gets configured. Four sub-tasks:
 2. Create a new communication channel → **Shared AS2**
 3. Search for **"Rhythm AS2"** (the shared Rithum/DSCO connection)
 4. Select it — this uses Orderful's existing certificate already known to Rithum
-5. Do NOT create a new cert — reuse the shared connection (same one used by Chewy, etc.)
+5. Do NOT create a new cert — reuse the shared connection (same one used by another customer, etc.)
 
 #### B. Enable AS2 in DSCO Portal (requires support call)
 
@@ -105,7 +105,7 @@ AS2 is **NOT available by default** in the DSCO portal. You must call Rithum sup
 | Filename | `Purchase_Order_${ymdt}.edi` |
 | Sender Interchange ID | Retailer's DSCO ISA ID (e.g., `DSCOAAFES`) |
 | Sender Interchange Qualifier | `ZZ` |
-| Receiver Interchange ID | Customer's Orderful ISA ID (e.g., `ORDFLRUFFLEBUTT`) |
+| Receiver Interchange ID | Customer's Orderful ISA ID (e.g., `NORTHWINDAPP`) |
 | Receiver Interchange Qualifier | `ZZ` |
 | Include Test Orders | **Checked** |
 | Source Data | **All retailers** (critical — see gotcha below) |

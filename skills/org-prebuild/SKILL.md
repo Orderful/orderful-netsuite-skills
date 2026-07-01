@@ -35,7 +35,7 @@ From the onboarding tracker and recon reports:
 
 ## Step 0 — Audit /v2/rules (BEFORE testing)
 
-**Run the `audit-rules` skill before any outbound testing.** Per-relationship rules at `/v2/rules` can silently strip required segments from outbound messages even when the NS-stored message is correct and `/v3/validate` passes. This was learned the hard way on Sherwood Lumber (May 2026) — 3 rules had narrow allowlists that stripped required CN/SF/BM segments, costing hours of debugging.
+**Run the `audit-rules` skill before any outbound testing.** Per-relationship rules at `/v2/rules` can silently strip required segments from outbound messages even when the NS-stored message is correct and `/v3/validate` passes. This was learned the hard way on Timberline Lumber (May 2026) — 3 rules had narrow allowlists that stripped required CN/SF/BM segments, costing hours of debugging.
 
 See [`audit-rules`](../audit-rules/SKILL.md) for the full procedure.
 
@@ -179,7 +179,7 @@ Content-Type: application/json
 }
 ```
 
-**API gotcha (learned on RuffleButts May 2026):** Do NOT use top-level `testCommunicationChannelId` / `prodCommunicationChannelId` fields in the PATCH — the API returns `property should not exist`. The correct path is `config.communicationChannelSettings`.
+**API gotcha (learned on Northwind Apparel May 2026):** Do NOT use top-level `testCommunicationChannelId` / `prodCommunicationChannelId` fields in the PATCH — the API returns `property should not exist`. The correct path is `config.communicationChannelSettings`.
 
 ### For production: replace with real partner delivery channel
 

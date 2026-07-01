@@ -30,9 +30,9 @@ All live DSCO vendors trade the same 5 transaction types:
 
 | Vendor | 850 | 856 | 810 | 846 | 870 |
 |--------|-----|-----|-----|-----|-----|
-| GIII Apparel Group | Live | Live | Live | Live | Live |
-| Peak Design | Live | Live | Live | Live | Live |
-| Vida Brands | Live | Live | Live | Live | Live |
+| Vendor A | Live | Live | Live | Live | Live |
+| Vendor B | Live | Live | Live | Live | Live |
+| Vendor C | Live | Live | Live | Live | Live |
 
 ## DSCO 850 Structure
 
@@ -107,8 +107,8 @@ AAFES via DSCO rejects invoices with extra fields. Send ONLY the required fields
 
 ## Reference 850 Transaction
 
-Template transaction: Vida Brands → AAFES DSCO, TX 902487956, May 2 2026, ACCEPTED.
-Used as the template for the RuffleButts test 850 (TX 909123876).
+Template transaction: Vendor C → AAFES DSCO, TX 900000000, May 2 2026, ACCEPTED.
+Used as the template for the Northwind Apparel test 850 (TX 900000000).
 
 ## AAFES Compliance
 
@@ -135,7 +135,7 @@ AAFES via DSCO is the strictest 810 spec we've seen. The default SuiteApp mapper
 | `IT1.basisOfUnitPriceCode` | WE → QT |
 | `SAC_loop` | Drop — H850 not allowed; AAFES is merchant of record |
 
-Validated on RuffleButts (May 2026): 810 TX 909433588, JSONata v2, VALID.
+Validated on Northwind Apparel (May 2026): 810 TX 900000000, JSONata v2, VALID.
 
 ## AAFES DSCO 846 Inventory Feed
 
@@ -197,12 +197,12 @@ AAFES offers an **820 Remittance Advice** through its electronic-payment (FEDI) 
 
 The Orderful **NetSuite SuiteApp does not process the 820 natively** — it's a "Process as Custom" doc type (see `custom-process-transactions`). Auto-applying AAFES payments against invoices is a **custom inbound build** (820 → NetSuite Customer Payments applied to open invoices, matched on the RMR invoice reference), not a toggle. Get a sample 820 to scope it.
 
-## Roundtrip Validation (RuffleButts, May 2026)
+## Roundtrip Validation (Northwind Apparel, May 2026)
 
 Full E2E sandbox roundtrip achieved:
-- 850 (909123876) → SO 74458377 → IF 74458577
-- 856 (909413586, JSONata v6) — VALID
-- 810 (909433588, JSONata v2) — VALID
+- 850 (900000000) → SO 74400000 → IF 74400000
+- 856 (900000000, JSONata v6) — VALID
+- 810 (900000000, JSONata v2) — VALID
 
 ### Full DSCO Portal Testing (May 18, 2026)
 
@@ -214,18 +214,18 @@ All 15 portal steps completed with 12 DSCO test orders:
 - **810 invoice** → completed during session
 - **Returns** → handled manually in DSCO UI (no EDI return document)
 
-Partnership 153136 status: Setup=Complete, Testing=Complete, GoLive=InProgress. All 10 relationships READY. Go-live: June 15, 2026.
+Partnership 7000002 status: Setup=Complete, Testing=Complete, GoLive=InProgress. All 10 relationships READY. Go-live: June 15, 2026.
 
 ### Communication Channel Gotcha
 
-The outbound communication channel was initially pointing to the wrong AS2 destination. Rob identified the issue and updated the relationship to the correct **"disco rhythm"** channel. Outbound testing failed at delivery until this was fixed. **Always verify the outbound comm channel matches the DSCO/Rithum AS2 destination before testing.**
+The outbound communication channel was initially pointing to the wrong AS2 destination. a teammate identified the issue and updated the relationship to the correct **"disco rhythm"** channel. Outbound testing failed at delivery until this was fixed. **Always verify the outbound comm channel matches the DSCO/Rithum AS2 destination before testing.**
 
 ## Transformation Status
 
 As of May 2026:
 - Guideline 146778 (850 inbound): **53 schema gaps**, saved as Draft, NOT published
 - This means inbound 850 JSONata for NS requires manual work
-- **However:** Isaiah successfully processed test 850 through NS despite the gaps — the SuiteApp's inbound flow worked for the test transaction
+- **However:** a teammate successfully processed test 850 through NS despite the gaps — the SuiteApp's inbound flow worked for the test transaction
 
 ## Rithum/DSCO Portal (15 Steps)
 
@@ -243,7 +243,7 @@ AAFES provides custom templates that override generic DSCO instructions:
 ### AS2 Connection
 
 - AS2 is **NOT available by default** — must call Rithum support (844-482-4357 → DSCO support → DSCO onboarding) to enable
-- Use the shared **"Rhythm AS2"** connection in Orderful (same cert used by Chewy, etc.)
+- Use the shared **"Rhythm AS2"** connection in Orderful (same cert used by another customer, etc.)
 - ISA ID must be exactly 15 characters
 
 ### Automation Jobs
@@ -282,12 +282,12 @@ PATCH /v2/document-relationships/<rel_id>
 ## Known Platform Issues
 
 1. **856 conditional HL validation gap** — Travis Thorson (Dec 2022): direct AAFES requires Tare/Pack HL conditional validation. Not applicable to DSCO path.
-2. **GIII 846 overdue** — Production monitoring error running 6+ weeks (March–May 2026).
-3. **Amrapur 856 ASN broken** — Org hierarchy interfering with document creation (April–May 2026, unresolved).
+2. **Vendor A 846 overdue** — Production monitoring error running 6+ weeks (March–May 2026).
+3. **Loomcraft 856 ASN broken** — Org hierarchy interfering with document creation (April–May 2026, unresolved).
 
 ## NetSuite Workflow Conflicts (Legacy SPS Commerce)
 
-Customers migrating from SPS Commerce may have active workflows that break EDI order processing. Found on RuffleButts:
+Customers migrating from SPS Commerce may have active workflows that break EDI order processing. Found on Northwind Apparel:
 
 | Workflow | Problem | Fix |
 |----------|---------|-----|

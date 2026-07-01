@@ -16,7 +16,7 @@ Orderful's per-relationship transformation rules (`/v2/rules`) can silently stri
 
 ## Why this exists
 
-**Learned the hard way on Sherwood Lumber (May 2026):** 3 of Sherwood's per-relationship outbound rules had allowlists narrower than the partner spec. They silently stripped required CN, SF, and BM segments at send time. This cost hours of confused debugging because:
+**Learned the hard way on Timberline Lumber (May 2026):** 3 of Timberline Lumber's per-relationship outbound rules had allowlists narrower than the partner spec. They silently stripped required CN, SF, and BM segments at send time. This cost hours of confused debugging because:
 
 1. NS-stored messages (`custrecord_ord_tran_message`) had the right segments
 2. Orderful's `/v3/validate` accepted the message

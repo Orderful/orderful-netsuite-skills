@@ -185,7 +185,7 @@ For each retailer:
 
 ## AAFES-Specific DSCO Intelligence (learned 2026-05-08)
 
-AAFES (Army & Air Force Exchange Service) is a common DSCO retailer. Key findings from the RuffleButts onboarding:
+AAFES (Army & Air Force Exchange Service) is a common DSCO retailer. Key findings from the Northwind Apparel onboarding:
 
 ### AAFES has 3 separate EDI paths — always confirm which one
 
@@ -195,7 +195,7 @@ AAFES (Army & Air Force Exchange Service) is a common DSCO retailer. Key finding
 | DSCO/Rithum (dropship) | `DSCOAAFES` | 15749 | Dropship vendors routed through Rithum |
 | VendorNet/Radial (dropship) | `VNEXCHANGE` | 5375 | Dropship vendors routed through Radial |
 
-**All three paths are actively used** (confirmed May 2026: RuffleButts on DSCO, Simplehuman US on VendorNet). **Never assume DSCO — always ask the customer which path they use.**
+**All three paths are actively used** (confirmed May 2026: Northwind Apparel on DSCO, Acme Home US on VendorNet). **Never assume DSCO — always ask the customer which path they use.**
 
 ### DSCO 850 structure is unique
 
@@ -209,7 +209,7 @@ Ship-to is consumer home address (DTC), not store. FedEx Home Delivery is the st
 
 ### 855 NOT used on DSCO path
 
-Confirmed via live API data: zero AAFES DSCO vendors trade 855. All 3 live vendors (GIII, Peak Design, Vida Brands) trade 850/856/810/846/870 only. Generic 855 templates exist but are unused.
+Confirmed via live API data: zero AAFES DSCO vendors trade 855. All 3 live vendors (Vendor A, Vendor B, Vendor C) trade 850/856/810/846/870 only. Generic 855 templates exist but are unused.
 
 ### 856 ASN is simplified on DSCO
 
@@ -229,7 +229,7 @@ AAFES levies $150 per violation: "ASN sent but data download is missing/inaccura
 
 ## Rithum Portal: Customer Must Complete Setup Steps 1–7
 
-**Learned on RuffleButts (May 2026):** Rithum requires the customer to complete their initial portal setup before Orderful can proceed to test order exchange. Steps 1–7 cover:
+**Learned on Northwind Apparel (May 2026):** Rithum requires the customer to complete their initial portal setup before Orderful can proceed to test order exchange. Steps 1–7 cover:
 
 - Billing contacts and email notifications
 - Pricing agreements with the retailer

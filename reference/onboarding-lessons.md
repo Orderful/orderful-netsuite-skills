@@ -1,12 +1,12 @@
 # Onboarding Process Lessons
 
-Compiled from the RuffleButts × AAFES onboarding (May 2026). These are process-level lessons applicable to all future customer onboardings.
+Compiled from the Northwind Apparel × AAFES onboarding (May 2026). These are process-level lessons applicable to all future customer onboardings.
 
 ## Process Model: Don't Wait, Don't Discover, Arrive Prepared
 
 | Dimension | Old | New |
 |-----------|-----|-----|
-| **People** | Contractors (Lysi/N2), OAs, AM handoff | Product team (Mike, Ashwath, Isaiah) + AM handoff |
+| **People** | Contractors (contractor vendors), OAs, AM handoff | Product team (the product team) + AM handoff |
 | **Process** | Wait for customer to commit TRs, do discovery on kickoff, wait for app install, wait for historical data | Create TRs for customer, get creds before kickoff, install on their behalf, pull historical data yourself |
 | **Systems** | Manual setup, testing, rule writing, JSONata, validation | NetSuite skills library for onboarding, setup, and validation |
 
@@ -66,7 +66,7 @@ Excel scientific notation truncates 13-digit UPCs. UPCs must come from NetSuite 
 
 ### 14. Verify the outbound communication channel points to the correct AS2 destination
 
-Wrong outbound comm channel = outbound docs fail at delivery even though they pass validation. On RuffleButts, the outbound relationship was pointing to the wrong AS2 channel — Rob fixed it to the correct "disco rhythm" channel. Always verify the channel matches the DSCO/Rithum AS2 destination before outbound testing.
+Wrong outbound comm channel = outbound docs fail at delivery even though they pass validation. On Northwind Apparel, the outbound relationship was pointing to the wrong AS2 channel — a teammate fixed it to the correct "disco rhythm" channel. Always verify the channel matches the DSCO/Rithum AS2 destination before outbound testing.
 
 ### 15. 870 cancellations can be generated via API without building a full NS-native workflow
 
@@ -82,7 +82,7 @@ Each customer's NS environment has different locations, workflows, and fulfillme
 
 ### 18. Watch for legacy SPS Commerce workflows on migrating customers
 
-Customers migrating from SPS Commerce (like RuffleButts from Target) may have active SPS workflows that interfere with EDI order processing. Examples found on RuffleButts: "Set Default Order Variables" (references `shipaddressee` field), "[Sales Order] Magento Discount" (auto-sets Hold: Other), "SPS Invoice Automation Workflow" (auto-sets SPS Integration Status). These must be disabled or scoped to exclude Orderful EDI orders.
+Customers migrating from SPS Commerce (like Northwind Apparel from Target) may have active SPS workflows that interfere with EDI order processing. Examples found on Northwind Apparel: "Set Default Order Variables" (references `shipaddressee` field), "[Sales Order] Magento Discount" (auto-sets Hold: Other), "SPS Invoice Automation Workflow" (auto-sets SPS Integration Status). These must be disabled or scoped to exclude Orderful EDI orders.
 
 ### 19. Returns are manual in the DSCO UI for dropship
 

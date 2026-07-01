@@ -143,7 +143,7 @@ If the Orderful org is provisioned:
 
 ## How to download historical transactions from SPS
 
-Per Mike Mason (2026-05-08):
+Per a teammate Mason (2026-05-08):
 
 1. Navigate to **Fulfillment Monitor** in SPS Commerce portal
 2. Search for the transaction type, or just press Enter to search all transactions
@@ -162,4 +162,4 @@ Per Mike Mason (2026-05-08):
 - **Multi-qualifier items**: A single PO line may carry BP (buyer part), UP (UPC), and VN (vendor part). SPS may only display one. Check the raw EDI for all qualifiers — Orderful item lookup needs to know which qualifier to key on.
 - **Inactive connections still have history**: Don't ignore disabled connections — they may show why a partner relationship failed before, which helps avoid repeating mistakes.
 - **SPS test vs production**: SPS uses separate environments. Make sure you're looking at production transaction history, not test data.
-- **DSCO supplier IDs in SPS data.** If the customer has DSCO/Rithum connections (e.g., Nordstrom DSCO), the SPS transaction data may contain DSCO metadata in REF segments — including the customer's DSCO supplier ID. Extract this: `REF*ZZ*<supplier_id>*dsco_supplier_id`. This ID is needed for building test transactions on the DSCO path.
+- **DSCO supplier IDs in SPS data.** If the customer has DSCO/Rithum connections (e.g., another customer DSCO), the SPS transaction data may contain DSCO metadata in REF segments — including the customer's DSCO supplier ID. Extract this: `REF*ZZ*<supplier_id>*dsco_supplier_id`. This ID is needed for building test transactions on the DSCO path.

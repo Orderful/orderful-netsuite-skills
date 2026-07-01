@@ -23,7 +23,7 @@ Required from the user (ask via AskUserQuestion if missing):
 Optional but useful:
 
 - **Customer's Orderful org ID** (if already provisioned) — speeds up the network lookup
-- **Anything the user already knows** that should override the handoff (e.g., "Isaiah already deployed the Suite App")
+- **Anything the user already knows** that should override the handoff (e.g., "a teammate already deployed the Suite App")
 
 If the user hasn't provided either of the required inputs, ask before researching. Do not invent a customer or speculate from a name alone.
 
@@ -33,17 +33,17 @@ If the user hasn't provided either of the required inputs, ask before researchin
 
 - **SPS Commerce credentials** (if migrating from SPS) — to pull historical transactions and item catalogs
 - **DSCO/Rithum credentials** (if dropship) — to understand retailer connections
-- **NetSuite access** (sandbox + production) — to install SuiteApp and analyze field usage. Ask whether the customer has a sandbox — smaller customers on lower NS tiers may be prod-only (see `reference/ndcinc-p2p.md`).
+- **NetSuite access** (sandbox + production) — to install SuiteApp and analyze field usage. Ask whether the customer has a sandbox — smaller customers on lower NS tiers may be prod-only (see `reference/procure-to-pay.md`).
 - **Current EDI provider details** — ISA IDs, partner list, known issues
-- **Flow direction** — Is this Order-to-Cash (customer receives inbound POs) or Procure-to-Pay (customer sends outbound POs to suppliers)? P2P is not native to the SuiteApp and requires custom SuiteScript per transaction type. If P2P, flag immediately: (a) custom script work required, (b) ~2-4 hours per TX type, (c) who builds it (Lysi, Orderful, customer). See `reference/ndcinc-p2p.md` for the full breakdown.
+- **Flow direction** — Is this Order-to-Cash (customer receives inbound POs) or Procure-to-Pay (customer sends outbound POs to suppliers)? P2P is not native to the SuiteApp and requires custom SuiteScript per transaction type. If P2P, flag immediately: (a) custom script work required, (b) ~2-4 hours per TX type, (c) who builds it (a contractor vendor, Orderful, customer). See `reference/procure-to-pay.md` for the full breakdown.
 
-**Why this matters (validated on RuffleButts 2026-05-08):** By getting SPS + DSCO + NS access before the kickoff, we arrived with a pre-built partnership, confirmed the correct AAFES EDI path, and had a test 850 ready. AE feedback: "That was extremely productive and very slick!" VP Sales: "Big fan of the kickoff." Compare this to showing up and spending 30 minutes discovering basics.
+**Why this matters (validated on Northwind Apparel 2026-05-08):** By getting SPS + DSCO + NS access before the kickoff, we arrived with a pre-built partnership, confirmed the correct AAFES EDI path, and had a test 850 ready. AE feedback: "That was extremely productive and very slick!" VP Sales: "Big fan of the kickoff." Compare this to showing up and spending 30 minutes discovering basics.
 
 **If P2P is identified**, two additional questions are critical at kickoff:
-1. **What % of POs are drop-ship vs stock?** This is THE design question — it determines the entire 856 inbound implementation (Item Fulfillment vs Item Receipt, two completely different NS paths). MARS Medical was 87% drop-ship, discovered May 12 after scripts were already in flight. Ask this during kickoff, not after. See `reference/ndcinc-p2p.md` lesson #8.
-2. **Does the trading partner define the EDI guidelines (leader), or does the customer?** This determines who owns the spec. On Orderful, the leader publishes guidelines and Orderful maps between. Don't assume traditional spec exchange is needed. See `reference/ndcinc-p2p.md` lesson #15.
+1. **What % of POs are drop-ship vs stock?** This is THE design question — it determines the entire 856 inbound implementation (Item Fulfillment vs Item Receipt, two completely different NS paths). Acme Medical was 87% drop-ship, discovered May 12 after scripts were already in flight. Ask this during kickoff, not after. See `reference/procure-to-pay.md` lesson #8.
+2. **Does the trading partner define the EDI guidelines (leader), or does the customer?** This determines who owns the spec. On Orderful, the leader publishes guidelines and Orderful maps between. Don't assume traditional spec exchange is needed. See `reference/procure-to-pay.md` lesson #15.
 
-**Requirements baseline document pattern (validated May 2026):** When a P2P or complex onboarding surfaces detailed requirements questions, use Isaiah's structured requirements baseline doc format: why / what's different / the #1 design decision / status snapshot / doc-by-doc requirements / testing strategy / what we need / timeline / appendix. This pattern got a customer (Logan Watson, MARS Medical) to deliver detailed, implementable answers for all 7 TX types in under 12 hours. Thin questions produce thin answers; structured frameworks produce structured answers. See `reference/ndcinc-p2p.md` lessons #10-11.
+**Requirements baseline document pattern (validated May 2026):** When a P2P or complex onboarding surfaces detailed requirements questions, use a teammate's structured requirements baseline doc format: why / what's different / the #1 design decision / status snapshot / doc-by-doc requirements / testing strategy / what we need / timeline / appendix. This pattern got a customer (Jordan, Acme Medical) to deliver detailed, implementable answers for all 7 TX types in under 12 hours. Thin questions produce thin answers; structured frameworks produce structured answers. See `reference/procure-to-pay.md` lessons #10-11.
 
 **Credential sharing:** Use 1Password links or the platform's future secret store, not email or Zoom chat. For urgency, accept what the customer sends but flag for rotation.
 
@@ -102,7 +102,7 @@ Validate:
 
 ### 6. Deliver
 
-Save to `/outputs/[CustomerName]_Kickoff_PrepDoc.docx` (or `.md` if docx generation not available). Briefly summarize what changed vs. boilerplate — e.g., "Network shows Sally Beauty in-network but BSG missing standalone — flagged that BSG likely shares SALLYBEAUTY ISA."
+Save to `/outputs/[CustomerName]_Kickoff_PrepDoc.docx` (or `.md` if docx generation not available). Briefly summarize what changed vs. boilerplate — e.g., "Network shows the partner Beauty in-network but BSG missing standalone — flagged that BSG likely shares EXRETAILER ISA."
 
 ## Tone of the doc
 
@@ -111,17 +111,17 @@ This is a doc the AM reads while on the call. Keep it scannable, not prosy.
 - Use bullets and tables, not paragraphs
 - Each Q&A answer should be ≤2 sentences — long enough to actually answer the question, short enough to glance at
 - Risks should be one line each — flag the issue, not solution it
-- Decisions table: prescribe a recommendation when there's a sensible default (e.g., "First partner: Sally / BSG (recommended)"), don't just list options
+- Decisions table: prescribe a recommendation when there's a sensible default (e.g., "First partner: the partner / BSG (recommended)"), don't just list options
 
 ## The New Onboarding Model (validated May 2026)
 
-The RuffleButts and Sherwood onboardings proved a fundamentally different approach. Apply this model to every kickoff.
+The Northwind Apparel and Timberline Lumber onboardings proved a fundamentally different approach. Apply this model to every kickoff.
 
 ### People (Old → New)
 
 | Old | New |
 |-----|-----|
-| Contractors (Lysi/N2), OAs, AM/Sales handoff | Product team (Mike, Ashwath, Isaiah) + AM/Sales handoff |
+| Contractors (contractor vendors), OAs, AM/Sales handoff | Product team (the product team) + AM/Sales handoff |
 
 ### Process (Old → New)
 
@@ -157,7 +157,7 @@ Get credentials early → pull historical data → pre-build partnerships → mo
 | `custbody_so_rb_status=5` puts SO on hold | Your NetSuite has logic that puts EDI orders on hold — intentional? |
 | IT1.basisOfUnitPriceCode WE→QT | Should invoices carry EDI wholesale or NS retail pricing? |
 
-**Learned on RuffleButts (May 2026):** First email draft included raw NS field names. Customer wouldn't know what `custbody1=1` means. Rewrite in business terms they can answer without NS expertise.
+**Learned on Northwind Apparel (May 2026):** First email draft included raw NS field names. Customer wouldn't know what `custbody1=1` means. Rewrite in business terms they can answer without NS expertise.
 
 ## What this skill is NOT
 
