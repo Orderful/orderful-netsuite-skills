@@ -1,6 +1,6 @@
 # AAFES DSCO EDI Reference
 
-Reference data for AAFES (Army & Air Force Exchange Service) EDI via the DSCO/Rithum dropship path. Compiled from live transaction analysis and the RuffleButts onboarding (May 2026).
+Reference data for AAFES (Army & Air Force Exchange Service) EDI via the DSCO/Rithum dropship path. Compiled from live transaction analysis and a dropship-vendor onboarding (May–July 2026). 846 inventory feed setup, the 846 rule set, the 856 TD5 carrier placement, and the Orderful rules-engine gotchas were added July 2026 — see [`orderful-rules-engine.md`](orderful-rules-engine.md) for the rules-engine mechanics referenced below.
 
 ## Three AAFES EDI Paths
 
@@ -93,6 +93,12 @@ Required fields only:
 
 **NOT required:** N1*BY, N1*Z7, ship-to address, conditional Tare/Pack HL.
 
+### 856 TD5 carrier placement (outbound)
+
+`FEHD` (FedEx Home Delivery) is a shipping **service-level code**, and on the outbound 856 it belongs in the TD5 **`locationIdentifier`** element — that element is enum-validated and `FEHD` is a valid code there. The **`identificationCode`** element is the **carrier name** (FedEx / UPS / USPS), free-text. **Do NOT put `FEHD` in `identificationCode`** — it will pass validation (free-text) but is semantically the carrier field set to a service code.
+
+AAFES confirmed (via the customer) that **all** shipments transmit with service code `FEHD` even when the real carrier is USPS/Stamps.com. So force `locationIdentifier = "FEHD"` and keep `identificationCode` = the real carrier. The SuiteApp's `generateShipmentHL` pre-populates the TD5 from `customrecord_orderful_shipping_service` (service SCAC → `identificationCode`, service-level code → `locationIdentifier`, name → `routing`), keyed on the ship method — so either map every RF-SMART/ship method's service-level to `FEHD`, or force `locationIdentifier` via JSONata (sandbox) / an Orderful rule (prod).
+
 ## DSCO 810 Invoice (Strict)
 
 AAFES via DSCO rejects invoices with extra fields. Send ONLY the required fields:
@@ -130,6 +136,66 @@ AAFES via DSCO is the strictest 810 spec we've seen. The default SuiteApp mapper
 | `SAC_loop` | Drop — H850 not allowed; AAFES is merchant of record |
 
 Validated on RuffleButts (May 2026): 810 TX 909433588, JSONata v2, VALID.
+
+## AAFES DSCO 846 Inventory Feed
+
+Production inventory to AAFES/DSCO is a scheduled **846 EDI** feed (guideline 146780) — not the 2-column CSV, which is only the portal-onboarding bootstrap. All live DSCO vendors send 846s to `DSCOAAFES`; `source` shows as `APIV3` (the SuiteApp POSTs the 846 to Orderful's v3 API) or `EDIJOBS` (a scheduled file job), on a daily-to-hourly cadence.
+
+### Turning on the 846 (NetSuite SuiteApp)
+
+The 846 is **not** transaction-driven (no IF/Invoice). The SuiteApp generates it from a saved search (or analytics dataset) configured on the **Customer record** (the trading-partner customer), fired by a scheduled MapReduce.
+
+1. **Customer-record fields** (on the AAFES trading-partner customer). These live on the Customer *form* — when empty they don't surface in SuiteQL, and they are **not** on the ECT or the script deployment:
+   - `custentity_orderful_inv_advice_search` — "Inventory Advice Search" (a saved search), **or**
+   - `custentity_orderful_inv_advice_dataset` — "Inventory Advice Dataset Script Id" (an analytics dataset). Use one, not both.
+   - `custentity_orderful_inv_advice_per_loc` — "Send Per Location".
+2. **Saved-search / dataset column contract** — exact labels, all **internal IDs** (not SKUs):
+   - `ITEM` — item internal ID
+   - `AVAILABLE` — quantity available
+   - `LOCATION` — inventory Location internal ID
+
+   The SuiteApp derives the UPC/SKU EDI qualifiers from the item record, so the search only needs the internal item id. The `inventorybalance` SuiteQL table exposes `item` / `quantityavailable` / `location` as the source. Filter to the partner's catalog items (and the right fulfillment location) — don't dump the whole item master (an unfiltered feed can be tens of thousands of rows).
+3. **Generator:** `customscript_orderful_inventory_adv_mr` ("Orderful Inventory Advice Handler", MapReduce; deployment `customdeploy_orderful_inventory_adv_mr`). **Not Scheduled by default** — use **Save & Execute** on the deployment to test, then set a recurring schedule (hourly/daily) for production. `customscript_orderful_outbound_sending` must also be scheduled for delivery.
+
+### AAFES DSCO 846 rule set (guideline 146780)
+
+The SuiteApp's default 846 output diverges from the AAFES DSCO 846 spec in several places. These were fixed as Orderful platform **rules** on the vendor's outbound 846 relationship (per-path expressions — see [`orderful-rules-engine.md`](orderful-rules-engine.md) for the mechanics/gotchas):
+
+| # | Path (Orderful) | Fix (function) |
+|---|---|---|
+| 1 | `…beginningSegmentForInventoryInquiryAdvice.*.reportTypeCode` | set `"MM"` |
+| 2 | `…beginningSegmentForInventoryInquiryAdvice.*.time` | SuiteApp emits 4-digit `HHmm`; guideline needs 6-digit `HHMMSS` → `concatenate(time, "00")` |
+| 3 | `…LIN_loop.*.itemIdentification.*.productServiceIDQualifier` | set `"SK"` (when SKU present) |
+| 4 | `…LIN_loop.*.itemIdentification.*.productServiceIDQualifier1` | set `"UP"` (when UPC present) |
+| 5 | `…LIN_loop.*.itemIdentification.*.productServiceID1` | copy `productServiceID2` (UPC) into the pair-2 value slot |
+| 6 | `…LIN_loop.*.currency.*.entityIdentifierCode` | set `"SE"` |
+| 7 | `…LIN_loop.*.productItemDescription.*.description` | truncate to 80 |
+| 8 | `…LIN_loop.*.dateTimeReference` | **delete** (not allowed at line level) |
+| 9 | `…LIN_loop.*.QTY_loop.*.SCH_loop` | **delete** (see "available shows as on-order" below) |
+
+The available quantity itself is correct in `QTY*33` (Quantity Available) plus the per-warehouse `LS_loop → REF*WS` description — leave those.
+
+> **Note on the `time` fix:** `formatDate(time, "HHMM", "HHMMSS")` is a trap — Orderful's `formatDate` uses moment tokens where `MM` = month, so it fails whenever the minutes are > 12 (it only *looks* fine when minutes ≤ 12). Use lowercase `mm`, and prefer `concatenate(time, "00")` since `formatDate` doesn't reliably pad seconds. See [`orderful-rules-engine.md`](orderful-rules-engine.md).
+
+### Warehouse code (REF*WS) must be a registered DSCO warehouse
+
+The `REF*WS` warehouse code comes from the NetSuite **Location name**. It must be:
+- a **bare code** (e.g. `DFW`), not a descriptive location name (e.g. `"<Company> AAFES DFW"`) — fix at source by renaming the NS location; and
+- **registered as a warehouse in the DSCO/Rithum portal**, or DSCO's *application-level* import fails with `Unknown warehouse code "<x>" found, please create it.`
+
+This app-level import error is **separate from the EDI 997 ack** — a transaction can show `acknowledgmentStatus: ACCEPTED` (997) while DSCO's inventory import still rejects it on an unknown warehouse code.
+
+### 846 gotcha: available quantity shows as "quantity on order"
+
+If DSCO reports the available quantity under **Quantity on Order** (with a stray `estimated_availability_date`), the cause is the `SCH_loop` (rule #9). The SuiteApp emits an `SCH_loop` (line-item schedule) on **every** item duplicating the available qty with `dateTimeQualifier 018` + a date; DSCO reads a scheduled-quantity-with-a-date as *incoming/on-order* stock. The guideline marks `SCH_loop` **conditional** — "used only if the item is out-of-stock or discontinued." Deleting the `SCH_loop` makes the qty report as **available**. (Proper long-term fix: the SuiteApp should only emit `SCH` when available = 0 with a real restock date.)
+
+## AAFES 820 Remittance Advice
+
+AAFES offers an **820 Remittance Advice** through its electronic-payment (FEDI) program — **separate from the DSCO dropship channel**. Two things gate whether Orderful is even in the path:
+1. Does AAFES send it as **true EDI 820** (received in Orderful) or as **bank/ACH remittance** (arrives via the bank, never touches Orderful)? Confirm with AAFES AP.
+2. The 820 spec/version.
+
+The Orderful **NetSuite SuiteApp does not process the 820 natively** — it's a "Process as Custom" doc type (see `custom-process-transactions`). Auto-applying AAFES payments against invoices is a **custom inbound build** (820 → NetSuite Customer Payments applied to open invoices, matched on the RMR invoice reference), not a toggle. Get a sample 820 to scope it.
 
 ## Roundtrip Validation (RuffleButts, May 2026)
 
@@ -170,7 +236,7 @@ Rithum requires 15 portal steps: setup (1–5), inventory (6–7), test orders (
 ### AAFES-Specific Overrides
 
 AAFES provides custom templates that override generic DSCO instructions:
-- **Inventory:** 2-column CSV (`sku`, `quantity_available`) — NOT 846 EDI
+- **Inventory (portal-onboarding bootstrap only):** during DSCO portal steps 6–7 you seed a few test items with a 2-column CSV (`sku`, `quantity_available`). **This is a testing bootstrap, NOT the production feed.** Production inventory is a real, scheduled **846 EDI** feed — see [AAFES DSCO 846 Inventory Feed](#aafes-dsco-846-inventory-feed) below. (An earlier version of this doc wrongly said AAFES inventory is "2-column CSV, NOT 846 EDI" — that conflated the portal bootstrap with the production feed. All live DSCO vendors send production 846s.)
 - **Shipment:** AAFES-specific 856 template — NOT generic DSCO instructions
 - Always check for "Download AAFES Specific Template" links in the AAFES note box
 
