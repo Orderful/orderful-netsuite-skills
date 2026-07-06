@@ -152,7 +152,7 @@ Partnership 153136 status: Setup=Complete, Testing=Complete, GoLive=InProgress. 
 
 ### Communication Channel Gotcha
 
-The outbound communication channel was initially pointing to the wrong AS2 destination. Rob identified the issue and updated the relationship to the correct **"disco rhythm"** channel. Outbound testing failed at delivery until this was fixed. **Always verify the outbound comm channel matches the DSCO/Rithum AS2 destination before testing.**
+The outbound communication channel was initially pointing to the wrong AS2 destination. The relationship was updated to the correct **DSCO/Rithum AS2** channel. Outbound testing failed at delivery until this was fixed. **Always verify the outbound comm channel matches the DSCO/Rithum AS2 destination before testing.**
 
 ## Transformation Status
 
@@ -177,7 +177,7 @@ AAFES provides custom templates that override generic DSCO instructions:
 ### AS2 Connection
 
 - AS2 is **NOT available by default** — must call Rithum support (844-482-4357 → DSCO support → DSCO onboarding) to enable
-- Use the shared **"Rhythm AS2"** connection in Orderful (same cert used by Chewy, etc.)
+- Use the shared **"Rithum AS2"** connection in Orderful (same cert used by Chewy, etc.)
 - ISA ID must be exactly 15 characters
 
 ### Automation Jobs
@@ -241,3 +241,36 @@ NetSuite inventory allocation is **manual** for EDI/dropship workflows. Cannot c
 ## Confluence Reference
 
 [AAFES EDI Onboarding Detail](https://orderful.atlassian.net/wiki/spaces/NT/pages/4179623948) — Network Team canonical guide. Read this for the full onboarding process.
+
+## Go-Live & Production Learnings (June 2026)
+
+Hard-won from taking a DSCO dropship supplier fully live with AAFES. These are the things that only surface at cutover/go-live, not during sandbox testing.
+
+### DSCO is order-first — sequence the 856 before the 810
+The 810 can be delivered and **997-accepted** yet **silently not processed** by DSCO until the order is fulfilled and the **856 has succeeded**. No 824/864 rejection surfaces — it just sits. **997 / delivered / accepted = AS2 receipt only, NOT business acceptance or workflow validity.** Always send the 856 first, then the 810, and verify in the **DSCO order history** — not just Orderful's delivery status.
+
+### One SCAC for everything: map ALL ship methods → FEHD
+AAFES transmits **every** shipment with SCAC `FEHD` regardless of the actual carrier — FedEx, Stamps.com, **even USPS**. In the NS SuiteApp shipping/SCAC lookup, map **every** shipping method the supplier uses (all carriers, every method in their pack/ship tool) → `FEHD`, not just "FedEx Home Delivery." An unmapped method reproduces the TD5 carrier failure below **on a live order → AAFES chargeback**.
+
+### TD5 carrier failure — root cause & fix
+If the NS **production** shipping/SCAC lookup is missing/misconfigured, the 856 `TD5` emits the carrier **name** (e.g., "FedEx") into `locationIdentifier` and **omits the mandatory `identificationCode`** → AAFES rejects with carrier errors. Fix = correct the shipping-method → SCAC mapping so `locationIdentifier` = `FEHD` and `identificationCode` is populated. **Sandbox often has this mapped while prod does not** — verify prod explicitly at cutover.
+
+### Manual export job silently blocks live orders
+The DSCO **"Orders" export** automation job is set to **Manual** during testing. If left manual at go-live, real orders sit in DSCO **un-exported** and never reach Orderful/NS — it looks like "no orders arrived." **Switch the job to automatic at cutover.** If an expected order doesn't show, run the job manually and check its schedule *first*.
+
+### AAFES smoke-test / go-live is a gated sequence, not a date
+1. AAFES places a **smoke-test order**.
+2. Supplier must **fake-ship + invoice it clean in DSCO within 1 business day**, adhering to *AAFES Required Fields by Workflow*.
+3. **2–3 business days** through AAFES systems.
+4. If the invoice passes clean → **AAFES LIVE letter**.
+5. Compliant assortment moves to the **production stream** (2–3 more days).
+6. AAFES creates a **return in DSCO**; supplier must **accept it within 1 business day** to close out.
+
+### Production test side effects are real — plan the reversal
+Running the smoke test in production creates a real NS **fulfillment, invoice/AR, and reduces inventory**. Decide up front: is prod testing acceptable, who runs it, who reverses it. Deleting the NS records afterward does **not** retract the already-transmitted-and-accepted 856/810 (immutable Orderful events); the AAFES return is a **manual DSCO portal accept**, so NS records aren't required for it. **Hold reversals until the LIVE letter confirms the invoice passed** (easier to regenerate from existing records if AAFES flags a correction).
+
+### 856 item mapping: SK-first + short LIN01
+The 856 must emit **`SK` as the primary product-ID qualifier** (not `VN`) and a **short line-sequence number in `LIN01`** (≤20 chars) with the SKU in **`LIN03`**. Long SKUs (>20 chars) overflow `LIN01`'s limit and `VN`-first cascades to rejection. Swimwear-style SKUs mapped clean; the failure only hit **accessory items** whose NS config produced `VN`-first with the full SKU in `LIN01` — so test with a representative item from *each* product family, not just one.
+
+### Inventory feed: CSV/portal upload, not necessarily EDI 846
+AAFES inventory is a simple upload (`sku`, `quantity_available`), **not** an 846. Automating the feed = scheduling a NS **saved-search export → DSCO**, not building an 846 mapping. Confirm the exact mechanism (DSCO file feed vs. 846) with Rithum before building. A **stale-inventory** state can gate AAFES from releasing orders — dropship retailers commonly require current inventory before they'll send a PO.
