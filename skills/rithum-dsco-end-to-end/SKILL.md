@@ -32,7 +32,7 @@ Retailer (e.g. AAFES) ⇄ Rithum/DSCO network ⇄ Orderful ⇄ Customer's NetSui
 | 850 Purchase Order | Inbound (retailer → you) | The order |
 | 856 Ship Notice (ASN) | Outbound | **Send before the 810.** SKU in `LIN03`/`SK`; `LIN01` = short line-seq (≤20 chars) |
 | 810 Invoice | Outbound | Strictest spec — send ONLY required fields |
-| 846 Inventory | Outbound | For AAFES this is a **CSV/portal upload, not EDI 846** — confirm per retailer |
+| 846 Inventory | Outbound | **Production inventory is a real, scheduled EDI 846 feed** (all live AAFES DSCO vendors send one); the 2-col CSV/portal upload is only the portal-onboarding bootstrap (steps 6–7). See `reference/aafes-dsco.md` → "AAFES DSCO 846 Inventory Feed" |
 | 870 Order Status | Outbound | Often not required — confirm with the retailer |
 
 **855 is not used on the DSCO path** — acknowledgement is a platform status change, not a document.
@@ -79,7 +79,7 @@ Portal: `https://app.dsco.io`. The arc:
 | Steps | What | Key action |
 |-------|------|-----------|
 | 1–5 | Setup | Company info, warehouses, pricing agreement, **submit catalog** (retailer template — images often required) |
-| 6–7 | Inventory | Upload + update inventory. **AAFES = 2-col CSV (`sku`, `quantity_available`), NOT 846** |
+| 6–7 | Inventory | Upload + update inventory. **AAFES portal bootstrap = 2-col CSV (`sku`, `quantity_available`)** — seeds test stock only; the *production* feed is a scheduled EDI 846 (set up at cutover) |
 | 8 | Test orders | Portal generates test POs (pick a carrier) |
 | 9 | Acknowledgement + **AS2** | The real EDI wiring — see Phase 4 |
 | 10 | Ship | Outbound 856 (test tracking: FedEx = 15 zeros; UPS = `1Z` + 16 zeros) |
@@ -116,7 +116,8 @@ Portal: `https://app.dsco.io`. The arc:
 2. Finish the prod **enabled-transaction** links (customer + doc-type + direction) so transactions match.
 3. Set all Orderful relationships **READY** + **autoSend ON**; schedule the inbound polling job; set the prod API secret + polling bucket.
 4. **Replace the "Keep In Orderful" outbound channel with the real DSCO/Rithum AS2 delivery.**
-5. **Map ALL shipping methods → the retailer's SCAC in the NS prod shipping/SCAC lookup.** For AAFES, *everything* transmits as **`FEHD`** regardless of actual carrier (FedEx, Stamps.com, even USPS). Map every method the customer's pack/ship tool uses — not just "FedEx Home Delivery."
+5. **Map ALL shipping methods in the NS prod shipping lookup — and put the retailer's code in the right TD5 field.** For AAFES, *every* shipment transmits with service code **`FEHD`** regardless of actual carrier (FedEx, Stamps.com, even USPS) — but `FEHD` is a **service-level code**: it goes in the lookup's *service-level* field (→ TD5 `locationIdentifier`, enum-validated), while the *SCAC/carrier* field stays the real carrier name (FedEx/UPS/USPS → TD5 `identificationCode`). Putting `FEHD` in the carrier field passes validation but ships a service code as the carrier. Map every method the customer's pack/ship tool uses — not just "FedEx Home Delivery" — or force `locationIdentifier` universally via JSONata / an Orderful rule.
+6. **Stand up the production 846 inventory feed** — saved search on the trading-partner Customer record (`ITEM`/`AVAILABLE`/`LOCATION`, internal IDs) + schedule the Inventory Advice Handler MR; the `REF*WS` warehouse code must be a bare code registered as a warehouse in the DSCO portal. See `reference/aafes-dsco.md` → "AAFES DSCO 846 Inventory Feed".
 
 ⚠ **Watchouts**
 - **TD5 carrier failure:** if the prod shipping/SCAC lookup is missing/misconfigured, the 856 `TD5` emits the carrier *name* in `locationIdentifier` and omits the mandatory `identificationCode` → rejected. Sandbox often has the mapping while prod doesn't — **verify prod explicitly.**
@@ -142,7 +143,7 @@ Go-live is a **gated sequence, not a date** (AAFES example):
 ## Top watchouts (quick reference)
 
 1. **Send the 856 before the 810** — DSCO is order-first; 997 ≠ business acceptance.
-2. **Map every ship method → the retailer's SCAC** (AAFES = `FEHD` for all carriers).
+2. **Map every ship method — and put the code in the right field**: the retailer's universal code is a *service-level* code (AAFES = `FEHD` → TD5 `locationIdentifier`); the carrier/SCAC field stays the real carrier name.
 3. **Outbound relationships need a comm channel** or delivery fails silently.
 4. **Source Data = "All retailers"** or the Orders export pulls 0.
 5. **Flip automation jobs to automatic at cutover** — manual blocks live orders.
