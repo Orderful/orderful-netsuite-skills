@@ -74,7 +74,7 @@ This is where the real EDI connection gets configured. Four sub-tasks:
 
 1. Open the customer's org in Orderful
 2. Create a new communication channel → **Shared AS2**
-3. Search for **"Rhythm AS2"** (the shared Rithum/DSCO connection)
+3. Search for **"Rithum AS2"** (the shared Rithum/DSCO connection)
 4. Select it — this uses Orderful's existing certificate already known to Rithum
 5. Do NOT create a new cert — reuse the shared connection (same one used by Chewy, etc.)
 
@@ -185,7 +185,7 @@ Rithum reviews all test results. If passed, the connection moves to production. 
 6. **AAFES inventory is CSV, not 846 EDI** — simple 2-column spreadsheet upload
 7. **855 not used on DSCO** — acknowledgement is platform-level, no EDI document
 8. **Carrier for AAFES DSCO dropship** — FedEx Home Delivery (FEHD) is standard
-9. **Verify outbound comm channel before testing** — wrong AS2 destination = delivery failure even with VALID status. Confirm the relationship points to the correct DSCO/Rithum channel (e.g., "disco rhythm"), not a generic or wrong AS2 connection
+9. **Verify outbound comm channel before testing** — wrong AS2 destination = delivery failure even with VALID status. Confirm the relationship points to the correct DSCO/Rithum AS2 channel, not a generic or wrong AS2 connection
 10. **870 cancellation via API** — for portal step 11, generate the 870 via Orderful API rather than building a full NS cancellation workflow. Sufficient for testing.
 11. **Returns are manual** — step 14 is handled in the DSCO UI, not via EDI return document. Don't scope return automation for DSCO dropship.
 12. **Pre-create inventory in sandbox** — NS inventory allocation is manual for EDI/dropship. Can't commit via REST API. Pre-create large quantities (999 units) so test orders proceed without manual allocation.

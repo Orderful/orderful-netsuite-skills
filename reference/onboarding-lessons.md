@@ -66,7 +66,7 @@ Excel scientific notation truncates 13-digit UPCs. UPCs must come from NetSuite 
 
 ### 14. Verify the outbound communication channel points to the correct AS2 destination
 
-Wrong outbound comm channel = outbound docs fail at delivery even though they pass validation. On RuffleButts, the outbound relationship was pointing to the wrong AS2 channel — Rob fixed it to the correct "disco rhythm" channel. Always verify the channel matches the DSCO/Rithum AS2 destination before outbound testing.
+Wrong outbound comm channel = outbound docs fail at delivery even though they pass validation. On RuffleButts, the outbound relationship was pointing to the wrong AS2 channel — Rob fixed it to the correct DSCO/Rithum AS2 channel. Always verify the channel matches the DSCO/Rithum AS2 destination before outbound testing.
 
 ### 15. 870 cancellations can be generated via API without building a full NS-native workflow
 
