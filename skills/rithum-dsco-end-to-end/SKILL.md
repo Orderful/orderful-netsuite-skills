@@ -19,11 +19,44 @@ Retailer (e.g. AAFES) ⇄ Rithum/DSCO network ⇄ Orderful ⇄ Customer's NetSui
 - **You never EDI the retailer directly.** Orderful connects to Rithum/DSCO; Rithum routes to the retailer. Coordinate setup with Rithum (`dscopartnersetup@rithum.com`), not the retailer.
 - **DSCO is order-first.** The retailer processes your documents *in order sequence*, not as they arrive. An 810 (invoice) can be received and 997-accepted but **silently not processed** until the order is fulfilled and the **856 (ASN) has succeeded**. Always send the **856 before the 810**, and confirm status in the **DSCO order history**, not just Orderful's delivery status. `997 / delivered / accepted = AS2 receipt only`, never business acceptance.
 
+## Division of labor — who owns what
+
+The single biggest source of stalls is ambiguity about who does the next step. Print this.
+
+| Workstream | Customer (supplier) | Orderful | Rithum | Retailer |
+|---|---|---|---|---|
+| Retailer relationship + portal invite | **Owns** — initiates with their buyer; accepts the invite | — | Sends invite on retailer request | Approves vendor; triggers invite |
+| Portal steps 1–7 (company, pricing, warehouses, catalog, inventory seed) | **Owns** — only they have this commercial data | Advises | Reviews catalog | Approves assortment |
+| Portal steps 8–15 (test orders → returns) | Clicks alongside | **Drives** — runs the EDI legs | Reviews results (step 15) | — |
+| Orderful org, partnership, guidelines, NetSuite integration | — | **Owns** | — | — |
+| AS2 enablement + automation jobs | — | **Drives** (needs support call) | **Enables AS2** (not on by default) | — |
+| Warehouse codes registered in DSCO | **Owns** (portal) | Verifies the EDI matches | — | — |
+| Production carrier/ship-method list | **Owns** — gets it from the retailer | Maps it | — | Confirms codes |
+| Smoke test + LIVE letter + return acceptance | **Owns the clock** (1-business-day windows) | Monitors EDI | — | Runs the gate |
+| Steady state: current inventory, order SLAs | **Owns** | Monitors feed | — | Enforces (chargebacks) |
+
 ## When to use
 
 - Customer fulfills for a retailer via Rithum/DSCO dropship (AAFES, Chewy, etc.)
 - You're standing up a brand-new DSCO trading partner end to end
 - You need the full arc: recon → Orderful setup → testing → portal → cutover → go-live
+
+## What the customer must have ready (ask for ALL of this on day 1)
+
+These are commercial/supply-chain inputs **only the customer can provide**. Every one of them has stalled a real onboarding. Collect them in the kickoff, not when the step blocks:
+
+1. **An active vendor relationship with the retailer** — the retailer initiates the Rithum invite; Orderful cannot.
+2. **Rithum/DSCO portal invite accepted** + working login (`app.dsco.io`), and Orderful added as a portal user so we can drive steps 8–15.
+3. **A named EDI/ops contact** (one person, real inbox) for portal notifications and failure emails — not a shared alias.
+4. **Billing contact + email-notification recipients** (portal step 2 asks for these).
+5. **Pricing agreement decision** — someone authorized to accept the retailer's pricing terms (step 3 is a legal/commercial acceptance, not a technical step).
+6. **Warehouse list**: every ship-from warehouse with full address, and the **short warehouse code** each will be known by (e.g. `DFW`). This exact code must be (a) registered as a warehouse in the DSCO portal AND (b) what the EDI emits in `REF*WS` — a descriptive name in either place breaks the inventory import.
+7. **Product catalog in the retailer's template** — retailer-approved items, real UPCs, images if the retailer requires them. **Catalog upload gates everything** — test orders are generated from it.
+8. **Inventory numbers** for the catalog items (seed quantities for testing; a real feed source for production).
+9. **Their production ship methods** — every carrier/service their pack-ship tool uses (FedEx, USPS/Stamps.com, UPS…), so all of them get mapped before live orders.
+10. **NetSuite access** (sandbox + production) if Orderful runs the ERP side.
+
+**If the customer is migrating off another provider (e.g. SPS):** get those credentials too, and plan the Rithum re-pointing with `dscopartnersetup@rithum.com` — it is not instant.
 
 ## Transaction set (DSCO dropship)
 
@@ -72,26 +105,34 @@ Prove the full chain in sandbox **before** touching the portal:
 - NetSuite inventory allocation is **manual** for dropship — pre-create large quantities in sandbox so orders proceed.
 - Audit the customer's existing NS workflows — SPS-era workflows can silently hold or reject EDI orders.
 
-## Phase 3 — Rithum/DSCO portal (15-step supplier checklist)
+## Phase 3 — Rithum/DSCO portal (15-step supplier checklist, in painful detail)
 
-Portal: `https://app.dsco.io`. The arc:
+Portal: `https://app.dsco.io`. **Steps 1–7 are the customer's** (commercial data only they have — this is the most common long pole; send them these steps in the kickoff follow-up email and chase weekly). **Steps 8–15 are Orderful-driven** with the customer alongside.
 
-| Steps | What | Key action |
-|-------|------|-----------|
-| 1–5 | Setup | Company info, warehouses, pricing agreement, **submit catalog** (retailer template — images often required) |
-| 6–7 | Inventory | Upload + update inventory. **AAFES portal bootstrap = 2-col CSV (`sku`, `quantity_available`)** — seeds test stock only; the *production* feed is a scheduled EDI 846 (set up at cutover) |
-| 8 | Test orders | Portal generates test POs (pick a carrier) |
-| 9 | Acknowledgement + **AS2** | The real EDI wiring — see Phase 4 |
-| 10 | Ship | Outbound 856 (test tracking: FedEx = 15 zeros; UPS = `1Z` + 16 zeros) |
-| 11 | Cancel | Can generate the 870 via Orderful API rather than a full NS workflow |
-| 12 | Multi-line ship | Partial fulfillment |
-| 13 | Invoice | Outbound 810 |
-| 14 | Returns | **Manual in the DSCO UI — no EDI return document.** Don't scope return automation |
-| 15 | Next steps | Rithum reviews; on pass, connection moves toward production |
+**Golden rule for every step:** before following the generic DSCO instructions, look for a **"Download <Retailer> Specific Template"** link or a retailer note box — the retailer's own template/notes override the instructions (AAFES's note literally says "USE THIS TEMPLATE NOT WHAT IS LISTED IN THE INSTRUCTIONS SECTION").
+
+| # | Step | Owner | Exactly what to do | Done when |
+|---|------|-------|--------------------|-----------|
+| 1 | How to Get Started | Customer | Read intro, click Next | Step shows complete |
+| 2 | Configure Initial Settings | **Customer** | Company info, billing contact, email-notification recipients | Saved without validation errors |
+| 3 | Pricing Agreement | **Customer** | Someone *authorized* accepts the retailer's pricing terms (commercial acceptance, not technical) | Agreement accepted |
+| 4 | Supply Warehouses | **Customer** | Add every ship-from warehouse: full address + the **short warehouse code** (e.g. `DFW`) it will be known by. This registers the code DSCO's imports validate against | All warehouses listed with their codes |
+| 5 | Submit Catalog | **Customer** | Upload the product catalog **in the retailer's template** (real UPCs; images if required). This is the gate — test orders generate from it | Catalog accepted; items visible |
+| 6 | Load Items & Inventory | **Customer** (Orderful assists) | Download the *retailer-specific* inventory template (note box, not the instructions). Seed ~3 SKUs with `quantity_available` ≥ 20. For AAFES this bootstrap is a 2-col CSV (`sku`, `quantity_available`) | Items show on the Inventory page |
+| 7 | Update Inventory | Customer | Download current inventory (Download All Results → Export Inventory), change qty to 50, re-upload | Quantities show 50 |
+| 8 | Create Test Orders | Orderful + Customer | Pick the retailer's standard carrier from the dropdown (AAFES: FedEx – Home Delivery / FEHD), click Next → portal generates ~3 test POs. Note the PO numbers — steps 9–14 use them. Can be re-run for more | Test POs exist |
+| 9 | Acknowledge Orders | **Orderful** | The real EDI wiring — AS2 + both automation jobs (Phase 4). Run the Orders export; orders flip to **Acknowledged** (a platform status — no 855 document exists on DSCO) | Test orders show "Acknowledged" and appear in Orderful |
+| 10 | Ship an Order | **Orderful** (customer's NS) | Fulfill in NS → outbound 856 through the Outbound job. Test tracking numbers: FedEx = 15 zeros; UPS = `1Z` + 16 zeros. Respect ship-by dates + the retailer's service-level codes; check for a retailer-specific shipment template | Order shows shipped in DSCO order history |
+| 11 | Cancel an Order | Orderful | Generate the 870 via the Orderful API — don't build a full NS cancellation workflow just for this test | Cancellation reflected in DSCO |
+| 12 | Multi-Line Ship | Orderful | Partial fulfillment of a multi-line test PO → 856 | Partial shipment shows correctly |
+| 13 | Invoice | Orderful | Bill in NS → outbound 810 (**after** the 856 — order-first). Strict spec: required fields only | Invoice accepted in DSCO order history |
+| 14 | Returns | **Customer** | Handled **manually in the DSCO UI** — no EDI return document; don't scope return automation. Customer's team must know this is theirs in production | Return processed in the portal |
+| 15 | Next Steps | Rithum | Rithum reviews all results; on pass the connection moves toward production | Rithum confirms pass |
 
 ⚠ **Watchouts**
-- **The retailer's own templates override the generic DSCO instructions.** Always look for a "Download <Retailer> Specific Template" link in the note box before following the standard steps.
-- Orders **can't be deleted** in the DSCO UI once created — just use the latest batch.
+- Orders **can't be deleted** in the DSCO UI once created — ignore stale ones, use the latest batch.
+- **Account-switching bugs**: if the portal shows the wrong account, log out, clear cache/cookies, re-accept the invite.
+- Job failures: Automation Jobs → **Job History** → click the failed run — the detail page names the reason (wrong SCAC, missing tracking, invalid data).
 
 ## Phase 4 — AS2 + automation jobs (the part that breaks)
 
@@ -134,9 +175,27 @@ Go-live is a **gated sequence, not a date** (AAFES example):
 5. The compliant assortment moves to the **production stream** (2–3 more days).
 6. Retailer creates a **return in DSCO**; **accept it within 1 business day** to close out.
 
+**The customer owns the clock in this phase.** Make sure they know, before the smoke test starts, that they (or Orderful on their behalf) must:
+- **Fake-ship + invoice the smoke-test order within 1 business day** of it arriving — someone with NS + DSCO access must be available that day.
+- **Accept the retailer's closing return in DSCO within 1 business day** — it's a portal action on their account, and it's easy to miss because it arrives days after everyone stopped watching.
+- **Get the production carrier list from the retailer** (which methods/codes will real orders carry) so every method is mapped *before* volume — an unmapped method on a live order = failed 856 = **chargeback** (AAFES: **$150 per ASN violation**; one vendor accumulated $7,148.50 in a cycle).
+
 ⚠ **Watchouts**
 - **Running the smoke test in production has real side effects** — a real NS fulfillment, invoice/AR, and reduced inventory. Decide up front whether prod testing is acceptable, who runs it, and who reverses it. Deleting the NS records afterward does **not** retract the already-transmitted-and-accepted 856/810 (immutable Orderful events); the return is a manual DSCO accept, so NS records aren't required for it. **Hold reversals until the LIVE letter confirms the invoice passed.**
-- **Stale inventory can gate the retailer from releasing orders** — dropship retailers commonly require current inventory before sending a PO. Keep the feed current.
+- **Stale inventory can gate the retailer from releasing orders** — dropship retailers commonly require current inventory before sending a PO. Keep the feed current (this is why the production 846 must be *scheduled*, not one-off).
+
+## Silent killers (no error anywhere — things just stall)
+
+Each of these has burned days on a real onboarding because nothing showed red:
+
+1. **Portal invite never accepted / steps 1–7 sitting on the customer.** Rithum won't progress and no one is notified. Chase weekly; the commercial steps are the longest pole.
+2. **Catalog not uploaded** → step 8 can't generate test orders → everything downstream waits.
+3. **Source Data = specific retailer** on the Orders export → test orders come from a *fictitious test retailer*, so the job pulls **0 transactions** and simply looks like "no orders."
+4. **Automation jobs left on Manual at cutover** → real production POs sit un-exported in DSCO. Looks exactly like "the retailer isn't sending orders."
+5. **AS2 not enabled on the DSCO account** → nothing transmits; the portal just never shows AS2 options. It takes a *phone call* to Rithum (ticket alone is slow).
+6. **Warehouse code mismatch** → the 846/inventory import fails **application-level** in DSCO ("Unknown warehouse code … please create it") even while the EDI 997 shows ACCEPTED. The `REF*WS` code must be the bare registered code (e.g. `DFW`), not a descriptive location name — and it must exist as a warehouse in the portal (step 4).
+7. **810 sent before the 856** → 997-accepted but silently never processed (order-first). Check DSCO order history, not Orderful delivery status.
+8. **Stale inventory** → retailer quietly stops releasing orders; the Rithum "you missed an inventory update" exception email is the only signal — make sure it goes to a watched inbox.
 
 ---
 
@@ -152,6 +211,38 @@ Go-live is a **gated sequence, not a date** (AAFES example):
 8. **Confirm the correct EDI path first** — wrong account = rebuild.
 9. **810 is strict**; **SKU in LIN03, short seq in LIN01** on the 856.
 10. **Returns are manual** in the DSCO UI — no EDI return doc.
+
+## Definition of done — gate checklists
+
+Don't declare a phase done until every box in its gate is checked.
+
+**Gate A — ready to start (customer inputs)**
+- [ ] Retailer relationship active; Rithum invite accepted; Orderful added to the portal
+- [ ] Named EDI/ops contact + billing contact + notification recipients provided
+- [ ] Pricing agreement accepted by someone authorized
+- [ ] Warehouse list with short codes; catalog in retailer template (UPCs, images); seed inventory numbers
+- [ ] NetSuite access (SB + prod) if Orderful runs the ERP side; prior-provider creds if migrating
+
+**Gate B — portal testing complete (end of Phase 3/4)**
+- [ ] All 15 steps green; Rithum confirms pass (step 15)
+- [ ] AS2 enabled on the DSCO account; both automation jobs exist and have succeeded in Job History
+- [ ] Acknowledge / ship / cancel / multi-line / invoice / return all verified in DSCO order history
+
+**Gate C — production cutover**
+- [ ] Prod SuiteApp mirrored; relationships READY + autoSend; prod polling wired
+- [ ] Outbound channel = real DSCO/Rithum AS2 (not "Keep In Orderful")
+- [ ] **Every** production ship method mapped (service-level code → TD5 `locationIdentifier`; real carrier in the SCAC field)
+- [ ] Production 846 inventory feed configured **and scheduled**; `REF*WS` = bare registered warehouse code
+- [ ] **Both automation jobs flipped to automatic**
+- [ ] First live 850's items resolve in NS (no `ITEM_LOOKUP_MISSING`)
+
+**Gate D — go-live closed out**
+- [ ] Smoke-test order fake-shipped + invoiced clean within 1 business day
+- [ ] LIVE letter received; assortment moved to production stream
+- [ ] Closing return accepted in DSCO within 1 business day
+- [ ] Reversals of smoke-test NS records done **after** the LIVE letter
+- [ ] Inventory feed confirmed recurring (not a one-off run); exception alerts going to a watched inbox
+- [ ] Customer team briefed: returns are manual in DSCO; order-first sequencing; chargeback triggers
 
 ## Support & contacts
 
