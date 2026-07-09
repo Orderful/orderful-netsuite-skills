@@ -52,10 +52,16 @@ A successful response looks like:
 { "status": "success", "recordId": 39449 }
 ```
 
-The MR is now queued in NetSuite — the actual reprocessing happens asynchronously. To verify completion:
+The MR is now queued in NetSuite — the actual reprocessing happens asynchronously, and the response carries **no taskId**. Verify with [monitor-mr](../monitor-mr/SKILL.md) using the marker pattern (capture the marker **before** Step 2 when you can):
 
-- **Customization > Scripting > Map/Reduce Script Status** → look for the most recent run of `customscript_orderful_transaction_mr`
-- Or check the `customrecord_orderful_transaction` row directly — its status should transition (e.g., `Error` → `Pending` → `Processing` → `Success` or `Error`) and `custrecord_ord_tran_retry_count` should reset to 0
+```bash
+# before triggering (optional but ideal on noisy/prod accounts):
+node skills/monitor-mr/monitor-mr.mjs <customer-dir> logs --flow reprocess --tail 1   # note "marker: N"
+# after triggering:
+node skills/monitor-mr/monitor-mr.mjs <customer-dir> watch --flow reprocess --after-id <N> --ot <recordId>
+```
+
+Completion is detected by the next MR SUMMARY log row; the log line `Beginning to process NetSuite Orderful Transaction internalid: <recordId>` confirms the run picked up your record, and the final OT status (`Success` / `Error` + error text) is the authoritative outcome. `custrecord_ord_tran_retry_count` should have reset to 0. Manual fallback: **Customization > Scripting > Map/Reduce Script Status** in the NS UI.
 
 ## Status guard
 
@@ -104,7 +110,7 @@ Administrator already has all three. Custom roles often have the SuiteScript per
 
 1. **Never invoke without explicit customer slug AND transaction ID.** Ask the user for both; don't pick or guess. The transaction ID must be the NetSuite internal ID, not the Orderful UUID.
 2. **Honor the status guard.** Don't suggest workarounds (e.g., "change the status to Error first") just to bypass the refusal. If the user truly intends to reprocess a successful transaction, they should make that decision deliberately in the NS UI.
-3. **Don't poll for completion in this skill.** The MR is asynchronous. Return the success response and direct the user to the Map/Reduce Script Status page if they want to confirm.
+3. **Don't poll for completion in this skill.** The MR is asynchronous. Return the success response and follow through with [monitor-mr](../monitor-mr/SKILL.md) (`watch --flow reprocess --ot <recordId>`) to confirm the outcome.
 4. **Don't assume sandbox vs. production.** The script reads `ENVIRONMENT` from the `.env`. If the user expected production but the env says sandbox (or vice versa), ask before changing.
 5. **One transaction per invocation.** No batch mode. If the user wants to reprocess multiple, run the skill multiple times — they can decide which IDs deserve retry.
 6. **Don't paste TBA secrets into chat.** Everything stays in the `.env`; the script reads it locally.

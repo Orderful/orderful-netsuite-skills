@@ -95,7 +95,7 @@ function getStatusId(scriptId) {
 
 On the customer (or vendor) record → **Orderful EDI Customer Transactions** subtab → per enabled transaction type:
 
-- **`custrecord_edi_enab_trans_cust_process`** (CHECKBOX, label "Process as Custom") — when checked, inbound transactions of this type land at `transaction_status_pending_cust_process` instead of being auto-mapped. Outbound: also requires the handling preference to be set to **Custom (Manual/Workflow)** for the SuiteApp to wait on your script's `Ready To Send` write.
+- **`custrecord_edi_enab_trans_cust_process`** (CHECKBOX, label "Process as Custom") — when checked, inbound transactions of this type land at `transaction_status_pending_cust_process` instead of being auto-mapped. Outbound: also requires the handling preference to be set to **Custom (Manual/Workflow)** for the SuiteApp to wait on your script's `Ready To Send` write. **As of NS-1037 this also has a 3-value override (`custrecord_edi_enab_custproc_override`, `customlist_orderful_setting_override` = Yes/No/Default) and per-doctype subsidiary defaults (`custrecord_orderful_sub_custproc_<doctype>`, e.g. `_850` / `_855` / `_856` / `_810` / `_940` / `_943` / …), so "process as custom" can be defaulted at the subsidiary per doc type. This legacy checkbox is the bilingual fallback only.**
 
 ### Outbound payload formats (for `custrecord_ord_tran_message`)
 

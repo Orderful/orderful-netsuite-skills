@@ -104,6 +104,8 @@ define(['N/log', 'N/query', 'N/runtime'], (log, query, runtime) => {
 
 The saved search referenced by the parameter filters `customrecord_orderful_transaction` for `status = transaction_status_pending_cust_process` AND `direction = 1` AND `document = <your doc type>`.
 
+> What routes a transaction into `pending_cust_process` is the resolved "process as custom" setting. As of NS-1037 that resolves via a 3-value override (`custrecord_edi_enab_custproc_override`) plus per-doctype subsidiary defaults (`custrecord_orderful_sub_custproc_<doctype>`, e.g. `_850` / `_855` / `_856` / `_810` / `_940` / `_943` / …), so it can be defaulted at the subsidiary per doc type. The legacy `custrecord_edi_enab_trans_cust_process` checkbox is the bilingual fallback only.
+
 ```js
 /**
  * @NApiVersion 2.1
