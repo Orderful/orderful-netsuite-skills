@@ -11,6 +11,8 @@ Guide the user through configuring a NetSuite **parent customer** and its **subc
 - `custentity_orderful_subcust_rep` set to `stores` or `dcs`.
 - Every subcustomer that the skill can match should have `custentity_orderful_shipto_n1_id` filled in.
 
+> **Many settings can now be set as subsidiary defaults instead of per-customer.** Handling prefs, the split flags, packaging/label data source, `salesOrderFormOverride`, `subCustomersRepresentation`, and more each have a `custrecord_orderful_sub_*` field on the Subsidiary record that every (sub)customer under it inherits unless it sets a local value. For hundreds-of-subcustomers setups, set the default once on the subsidiary rather than stamping every child. See [`reference/settings-architecture.md`](../../reference/settings-architecture.md) for the full resolution chain (customer → parent → subsidiary default → hardcoded) and the field-ID tables.
+
 ## Scope
 
 **In scope**:
@@ -102,6 +104,8 @@ If `custentity_orderful_subcust_rep` is unset:
 
 If already set, skip.
 
+> `subCustomersRepresentation` resolves **customer → parent → subsidiary default**. The customer field is `customlist_orderful_subcust_rep_opt` (exposed as `custentity_orderful_subcust_rep`); the subsidiary default is `custrecord_orderful_sub_subcust_rep`. If the parent's value is unset, the SuiteApp will inherit from the subsidiary default — so before writing it on the parent, check whether the subsidiary already supplies it (an unset parent + a populated subsidiary default is **not** a gap). See [`reference/settings-architecture.md`](../../reference/settings-architecture.md). Note: this one subsidiary default is the empty-means-"None" case (its list only has Stores/DCs).
+
 ### 3b. Ship-to N1 IDs on subcustomers
 
 For each subcustomer missing `custentity_orderful_shipto_n1_id`:
@@ -184,7 +188,9 @@ This skill stops at writing Enabled Transaction records and the parent/subcustom
 
 The list values come from `customlist_orderful_invoice_handl_opts` (and equivalents for the other prefs). For "auto-fire on record creation" behavior (the most common setup), set them to `id 1` ("Process on invoice creation" — the customlist's first value). For customers that gate outbound via their own workflows, use `id 2` ("Custom (Manual/Workflow)").
 
-Verify post-set by saving an in-scope source record (SO / IF / Invoice) and checking that a `customrecord_orderful_transaction` row appears with the right document type and status `Pending` → `Ready To Send`. If nothing appears, the handling pref is still unset or the customer's auto-send flag on the ECT (`custrecord_edi_enab_trans_auto_send_asn`) is false.
+Verify post-set by saving an in-scope source record (SO / IF / Invoice) and checking that a `customrecord_orderful_transaction` row appears with the right document type and status `Pending` → `Ready To Send`. If nothing appears, the handling pref is still unset (or it resolves to "never" / a custom-process state). The handling preference is the **only** outbound gate — the ECT no longer needs an auto-send flag to dispatch, and it resolves with the full customer → parent → subsidiary-default chain (see [`reference/settings-architecture.md`](../../reference/settings-architecture.md)).
+
+> Legacy note: connector versions **< v1.22.0** required a per-ECT `auto_send_asn = T` flag to dispatch the outbound. That flag was removed in v1.22.0 — the handling preference (with subsidiary-default resolution) is now the single gate. Don't look for `custrecord_edi_enab_trans_auto_send_asn` on current installs.
 
 ## Troubleshooting
 

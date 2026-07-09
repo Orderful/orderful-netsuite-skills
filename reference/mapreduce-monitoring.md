@@ -213,7 +213,7 @@ Primary outbound dispatch is **synchronous in the User Event** — see [outbound
 
 **There is no sanctioned remote trigger for these.** The agent-write RESTlet exposes only `triggerInboundPolling` and `reprocessTransaction`. To nudge outbound, use product paths (flip `custbody_orderful_ready_to_process_*` on the source record to re-fire the UE) or run the deployment from the NS UI. Monitoring works the same regardless of how a run started: scriptnote marker → SUMMARY beacon → OT/orderful-id verification.
 
-Verify outbound output: the OT gains `custrecord_ord_tran_orderful_id` and flips `Ready To Send`→`Pending`→(status MR)→`Success`. A `Pending` OT with `msg_len` tiny/placeholder and no orderful id = generation short-circuited (see the oversized-message and auto-send gotchas in [outbound-dispatch.md](outbound-dispatch.md)).
+Verify outbound output: the OT gains `custrecord_ord_tran_orderful_id` and flips `Ready To Send`→`Pending`→(status MR)→`Success`. A `Pending` OT with `msg_len` tiny/placeholder and no orderful id = generation short-circuited (see the oversized-message and handling-preference-gate gotchas in [outbound-dispatch.md](outbound-dispatch.md) — as of SuiteApp v1.22.0 the dispatch gate is the per-doc-type handling preference, not the old `auto_send_asn` flag).
 
 ## Operational gotchas
 

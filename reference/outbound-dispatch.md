@@ -6,7 +6,8 @@ How a saved NetSuite source record (Invoice, Item Fulfillment, Sales Order, etc.
 
 - Standard outbound runs **synchronously inside the User Event** `orderful_netsuiteTrxHandler_UE.afterSubmit`. By the time the source record's save returns, the outbound transaction has been generated and POSTed to Orderful — or an error has been written to the `customrecord_orderful_transaction` row.
 - The MapReduce `orderful_outboundTransactionHandling_MR.ts` is **a scheduled backstop only**, picking up records the UE didn't process (within `outboundBackProcessingWindowInDays`). The happy path never touches it.
-- The ECT field `custrecord_edi_enab_trans_auto_send_asn` is suffixed `_asn` but **gates auto-send for every outbound document type**, not just ASN. With it `F`, the UE creates the `customrecord_orderful_transaction` row + link but never writes the message — record stuck in `Pending`, length 0, no Orderful id, no error.
+- As of SuiteApp **v1.22.0** (NS-1037), the sole dispatch gate is the **handling preference** for the document type — a Pattern D setting resolved customer → parent customer → subsidiary default → hardcoded read-site default. With no effective handling preference, the UE creates the `customrecord_orderful_transaction` row + link but never writes the message — record stuck in `Pending`, length 0, no Orderful id, no error.
+- The old ECT field `custrecord_edi_enab_trans_auto_send_asn` ("auto-send") still **exists and is visible** in NetSuite, but as of v1.22.0 it **no longer gates outbound dispatch**. (Legacy note for accounts still on SuiteApp **< v1.22.0**: there, `auto_send_asn = T` *was* the gate.) Do not confuse this with `custbody_orderful_force_autosend`, a separate and still-valid field on the source record that drives the Generate-&-Send workflow-action manual-send mechanism.
 
 ## The dispatch path on transaction submit
 
@@ -23,7 +24,7 @@ linkRecordToOutboundTransaction
   ↓
 readiness check
   → STATUS_RELIANT_DOCUMENT_TYPES (currently just 880 grocery invoice) take the SO-status-reliant path via checkOutboundReadiness
-  → others take the simple gate: status === Pending && isAutoSendEnabled
+  → others take the simple gate: status === Pending && an effective handling preference is set for the doc type
   ↓ (if ready)
 generateAndDispatchOutboundTransaction
   → switches on documentType to call generateOutbound810 / generateAndSaveASN / etc.
@@ -52,25 +53,29 @@ Practical implication: **the MR only catches records the UE didn't process at su
 
 **Diagnostic mistake to avoid:** seeing a record stuck in `Pending` and concluding "the MR hasn't run yet." That's almost always wrong. If the source record was saved more than a few seconds ago and the `customrecord_orderful_transaction` is still `Pending` with no Orderful id and no error, the UE saved a Pending shell but didn't dispatch. The next section covers why.
 
-## The `_asn`-suffixed flag actually gates everything
+## The handling preference is the dispatch gate (v1.22.0+)
 
-The simple readiness gate inside `processOutboundTransaction` is:
+The simple readiness gate inside `processOutboundTransaction` is now `status === Pending` **plus an effective handling preference for the document type**. The handling preference is a Pattern D setting (the nullable field IS the override): the dispatcher resolves it customer → parent customer → subsidiary default → hardcoded read-site default. If it resolves to something dispatchable, the message generates and POSTs; if not, the UE leaves a `Pending` shell.
 
-```typescript
-readyToSend =
-  orderfulTransaction.status === OrderfulTransactionStatus.Pending &&
-  autoSendEnabled;
-```
+The per-document-type customer fields and their subsidiary-default backstops:
 
-`autoSendEnabled` is sourced from the ECT row, mapped in `Repositories/entity.repository.ts`:
+| Document type | Customer handling-pref field | Subsidiary-default field |
+|---|---|---|
+| 810 Invoice | `custentity_orderful_inv_handling_prefs` | `custrecord_orderful_sub_inv_hp` |
+| Credit Memo | `custentity_orderful_cm_handling_prefs` | `custrecord_orderful_sub_cm_hp` |
+| 855 PO Ack | `custentity_orderful_poack_handling_prefs` | `custrecord_orderful_sub_poack_hp` |
+| 856 ASN | `custentity_orderful_asn_handling_prefs` | `custrecord_orderful_sub_asn_hp` |
+| 940 / WSO | `custentity_orderful_wso_handling_prefs` | `custrecord_orderful_sub_wso_hp` |
+| WST (TO) | `custentity_orderful_wst_handling_prefs` | `custrecord_orderful_sub_wst_hp` |
+| WST (PO) | `custentity_orderful_wst_po_handling_prefs` | `custrecord_orderful_sub_wstpo_hp` |
 
-```typescript
-'customrecord_orderful_edi_customer_trans.custrecord_edi_enab_trans_auto_send_asn as auto_send'
-```
+Resolution is Pattern D: the customer field `!== undefined` stops the chain (so an explicit empty/zero counts as set); only an unset customer field falls through to the parent customer, then the subsidiary default (e.g. `custrecord_orderful_sub_inv_hp` seeds to `_ORDERFUL_ON_INVOICE_CREATION`), then the read-site hardcoded last resort.
 
-That's the **only** field driving `auto_send`, regardless of the document type the ECT is for. The `_asn` suffix is a historical naming artifact — the field originated for ASN auto-send and was repurposed without renaming. The Models layer aliases it to `isAutoSendEnabled` and the dispatcher gates on it for **every** outbound type (810, 856, 855, 940, 943, 880, simplified types, etc.).
+**Setup implication:** when enabling a new outbound document type for a customer, set the handling preference for that doc type — on the customer, or rely on the subsidiary default. Otherwise the UE will create Pending rows but never dispatch them.
 
-**Setup implication:** when enabling a new outbound document type for a customer (creating an ECT row), `custrecord_edi_enab_trans_auto_send_asn` is the auto-send flag you set to T — **even if the document type has nothing to do with ASN**. Otherwise the UE will create Pending rows but never dispatch them.
+> **Legacy (SuiteApp < v1.22.0):** before v1.22.0 the gate was the ECT flag `custrecord_edi_enab_trans_auto_send_asn` ("auto-send"), aliased to `auto_send` in `Repositories/entity.repository.ts` and to `isAutoSendEnabled` in the Models layer. Despite the `_asn` suffix (a historical naming artifact) it gated **every** outbound type, and you set it to `T` on each outbound ECT. NS-1037 removed it as a gate in v1.22.0 — the field is still present and visible in NetSuite but no longer drives dispatch. Accounts still on < v1.22.0 must still set `auto_send_asn = T`.
+
+`isProcessAsCustom` still routes around native generation: if the ECT's process-as-custom is effective (`custrecord_edi_enab_trans_cust_process` legacy boolean / `custrecord_edi_enab_custproc_override` override / per-doctype subsidiary default), records route through customer-built SuiteScript via the `PendingCustomProcess` status instead of native generation + dispatch.
 
 `STATUS_RELIANT_DOCUMENT_TYPES` (currently only 880) takes the alternate `checkOutboundReadiness` path with parent-SO status logic, so 880 may behave differently if the underlying SOs aren't in the expected status. Every other type uses the simple gate above.
 
@@ -78,25 +83,40 @@ That's the **only** field driving `auto_send`, regardless of the document type t
 
 | Observation on `customrecord_orderful_transaction` | Likely cause |
 |---|---|
-| status = Pending, `LENGTH(custrecord_ord_tran_message) = 0`, no `custrecord_ord_tran_orderful_id`, error empty | UE created the row + link but didn't dispatch. **Most common cause:** `custrecord_edi_enab_trans_auto_send_asn = F` on the ECT for this doc type. Set it to T and re-trigger by toggling the source record's `custbody_orderful_ready_to_process_*` flag (saving the source record re-fires the UE). |
+| status = Pending, `LENGTH(custrecord_ord_tran_message) = 0`, no `custrecord_ord_tran_orderful_id`, error empty | UE created the row + link but didn't dispatch. **Most common cause (v1.22.0+):** no effective handling preference for this doc type — the customer's `custentity_orderful_*_handling_prefs` field is unset *and* the subsidiary default doesn't supply one. Set the handling preference (on the customer or the subsidiary default) and re-trigger by toggling the source record's `custbody_orderful_ready_to_process_*` flag (saving the source record re-fires the UE). On accounts still **< v1.22.0**, the equivalent cause is `custrecord_edi_enab_trans_auto_send_asn = F` on the ECT — set it to T instead. |
 | status = Pending, message populated (length > 0), no Orderful id, error empty | Generation succeeded but the POST to Orderful didn't run or didn't update the row. Rare. Usually means dispatch was interrupted mid-flight (governance limit, NS failure). The MR backstop will pick it up on its next scheduled run. |
 | status = Error, message populated, error = "Review transaction in Orderful", Orderful id populated | Orderful received the message and rejected validation. Pull validations via `GET /v2/organizations/{orgId}/transactions/{txId}/validations` and iterate JSONata via [`writing-outbound-jsonata`](../skills/writing-outbound-jsonata/SKILL.md). |
 | status = Error, error contains a stack trace / specific exception | Generation failed before POST. Read the error text — usually a missing field, missing customer config, or a NS data issue (no cartons on IF, no Location, no shippingAddress, etc.). |
 
-Useful confirmation query when checking ECT auto-send for a customer:
+Useful confirmation query when checking outbound dispatch readiness for a customer — handling preference per doc type (with the subsidiary-default fallback), plus the process-as-custom routing flag:
+
+```sql
+SELECT c.id,
+       BUILTIN.DF(c.custentity_orderful_inv_handling_prefs)   AS inv_hp,
+       BUILTIN.DF(c.custentity_orderful_cm_handling_prefs)    AS cm_hp,
+       BUILTIN.DF(c.custentity_orderful_poack_handling_prefs) AS poack_hp,
+       BUILTIN.DF(c.custentity_orderful_asn_handling_prefs)   AS asn_hp,
+       BUILTIN.DF(c.custentity_orderful_wso_handling_prefs)   AS wso_hp
+FROM customer c
+WHERE c.id = <customer_id>;
+```
+
+If a customer field is empty, dispatch falls through to the parent customer, then the subsidiary default (`custrecord_orderful_sub_inv_hp`, `_cm_hp`, `_poack_hp`, `_asn_hp`, `_wso_hp`, `_wst_hp`, `_wstpo_hp`) — so an empty customer field is not necessarily a misconfiguration. Check the resolved value, not just the customer row.
+
+To check the process-as-custom routing on the ECT (records with it effective bypass native generation, routing through customer-built SuiteScript via the `PendingCustomProcess` status, separate from the dispatch path described here):
 
 ```sql
 SELECT id,
        BUILTIN.DF(custrecord_edi_enab_trans_document_type) AS doc_type,
-       custrecord_edi_enab_trans_auto_send_asn AS auto_send,
-       custrecord_edi_enab_trans_cust_process AS process_as_custom
+       custrecord_edi_enab_trans_cust_process              AS process_as_custom,
+       BUILTIN.DF(custrecord_edi_enab_custproc_override)   AS process_as_custom_override
 FROM customrecord_orderful_edi_customer_trans
 WHERE custrecord_edi_enab_trans_customer = <customer_id>
   AND custrecord_edi_enab_trans_direction = '2'   -- outbound
 ORDER BY id;
 ```
 
-For each outbound ECT expected to auto-dispatch, `auto_send` should be `T`. If `process_as_custom` is `T`, this ECT bypasses native generation — records route through customer-built SuiteScript via the `PendingCustomProcess` status, separate from the dispatch path described here.
+> **Legacy (< v1.22.0):** there, the per-ECT `custrecord_edi_enab_trans_auto_send_asn` was the auto-send gate and should be `T` on each outbound ECT expected to dispatch. As of v1.22.0 that field is no longer the gate (see the dispatch-gate section above).
 
 ## Test vs. live stream — the sandbox guard and the override that actually controls it
 
