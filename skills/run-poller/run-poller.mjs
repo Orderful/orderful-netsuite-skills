@@ -120,7 +120,10 @@ if (isSuccess) {
   const mrStatus = typeof body.mrStatus === 'object' ? body.mrStatus?.status : body.mrStatus;
   console.log(`Task ${body.taskId} is ${mrStatus}.`);
   console.log(
-    'Check NetSuite: Customization > Scripting > Script Deployments > "Orderful | Polling Inbound Transactions" > Execution Log',
+    `Watch it: node skills/monitor-mr/monitor-mr.mjs ${customerDir} watch --flow inbound-polling --task ${body.taskId}`,
+  );
+  console.log(
+    'Manual fallback: Customization > Scripting > Script Deployments > "Orderful | Polling Inbound Transactions" > Execution Log',
   );
   process.exit(0);
 }

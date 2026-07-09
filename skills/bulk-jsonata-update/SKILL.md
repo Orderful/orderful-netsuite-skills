@@ -147,7 +147,7 @@ The transformation must:
 7. **Never skip backups.** If the audit hasn't run, the deploy script must refuse. Restore depends on the backups existing.
 8. **Surface side findings, don't silently fix.** If a record has an unexpected shape (lowercase keys, unbalanced braces, empty JSONata), report it; let the user decide.
 9. **Don't run against records the user excluded.** Honor `--exclude` strictly; do not "helpfully" include skipped records on a retry.
-10. **Don't deploy to records with `custrecord_edi_enab_trans_cust_process = T`** (custom-process mode) without explicit user acknowledgement — those records' JSONata has different semantics.
+10. **Don't deploy to records with `custrecord_edi_enab_trans_cust_process = T`** (custom-process mode) without explicit user acknowledgement — those records' JSONata has different semantics. The checkbox still works as the legacy fallback, but as of NS-1037 the authoritative value is the resolved override (`custrecord_edi_enab_custproc_override` + per-doctype subsidiary default `custrecord_orderful_sub_custproc_<doctype>`), so a raw read of the legacy checkbox can be stale — confirm with the user rather than trusting the checkbox alone.
 
 ## Outputs the skill produces
 

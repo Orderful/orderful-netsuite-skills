@@ -84,6 +84,10 @@ const recs = await suiteql(`
     BUILTIN.DF(e.custrecord_edi_enab_trans_customer) AS customer_name,
     e.custrecord_edi_enab_trans_isa_company AS company_isa,
     BUILTIN.DF(e.custrecord_edi_enab_trans_jsonata_ver) AS jsonata_ver,
+    // NOTE: this legacy checkbox is the fallback only. As of NS-1037 the authoritative
+    // "process as custom" value is the resolved override (custrecord_edi_enab_custproc_override
+    // + per-doctype subsidiary default custrecord_orderful_sub_custproc_<doctype>), so a raw
+    // read of this column can be stale.
     e.custrecord_edi_enab_trans_cust_process AS use_custom,
     e.custrecord_edi_enab_jsonata AS jsonata
   FROM customrecord_orderful_edi_customer_trans e
