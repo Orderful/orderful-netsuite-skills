@@ -40,6 +40,17 @@ In the customer's NetSuite:
 3. **Save**.
 4. NetSuite will show you the **Token ID** and **Token Secret** **once**. Copy both into the `.env` file immediately — use `NS_SB_TOKEN_ID` / `NS_SB_TOKEN_SECRET` for a sandbox account, or `NS_PROD_*` for production.
 
+### Gotcha — your user won't appear in the User dropdown (even as Administrator)
+
+On **Access Tokens > New**, it's common to find that your user simply isn't selectable in the **User** field, so you can't create the token — and this happens even when you're logged in as Administrator (which already has the "Log in using Access Tokens" permission, so the usual "add the permission" advice doesn't apply). Two fixes, in order:
+
+1. **Select `Application Name` first.** The **User** list frequently stays empty until the integration is chosen. If you were typing into User before picking the app, that alone explains the empty list.
+2. **Use the self-service path — it bypasses the User dropdown entirely.** This creates a token for your *current* login (no user/role picking):
+   - **Home** dashboard → **Settings** portlet → **Manage Access Tokens** → **New Access Token** → set **Application Name** to your integration → **Save**. The User/Role auto-fill to you + your current role.
+   - If the "Manage Access Tokens" link isn't in the Settings portlet, add the portlet via **Personalize Dashboard**.
+
+The self-service route is the reliable way to mint *your own* token; the admin "create a token for another user" form is finicky about populating the User list. (This wasted real time during an escalation — reach for the self-service path first.)
+
 ## Required role permissions
 
 The role on the access token needs all of these. Set on **Setup > Users/Roles > Manage Roles > [role] > Permissions**:
