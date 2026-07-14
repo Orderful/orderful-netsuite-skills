@@ -79,14 +79,20 @@ The per-deployment "Execution Log" UI tab is the `scriptnote` table. Restricted 
 | `scripttype` | Internal id of the **script** (not the deployment). Join via `script.id` / filter via subselect on `script.scriptid`. |
 | `type` | `AUDIT`, `DEBUG`, `ERROR`, `EMERGENCY`, `SYSTEM` |
 | `title` | The `log.audit/error({title})` string — greppable, see the per-flow tables below. |
-| `date` | Date only; no time column is exposed. Ordering comes from `internalid`. |
+| `date` | Renders date-only by default but **carries full time** — `TO_CHAR(date,'YYYY-MM-DD HH24:MI:SS')` exposes it (corrected July 2026; earlier revisions of this doc said no time exists). `internalid` remains the authoritative sort/marker key. |
 | `detail` | Full log body. For `type='ERROR'` it's a JSON `SuiteScriptError` (`name`, `message`, `stack`). |
 
 `id`, `time`, `datecreated`, `created` do not exist.
 
+Three facts that make `scriptnote` more useful than this MR-focused doc implies (July 2026, verified live):
+
+- **It holds every server-side script's logs** — User Events, Suitelets, RESTlets, and WAs too, not just MRs. Because it's keyed per *script* (no deployment column), multi-deployment scripts (the NS Transaction Handler UE ×6, processing MR ×3, status MR ×5) need no deployment guessing.
+- **The lifecycle query**: `WHERE detail LIKE '%<id>%'` with *no script filter* reconstructs everything every script logged about one transaction, in order (`ORDER BY internalid`), in a single query — verified 0.8 s over 2M rows. Try each handle you have: OT internal id, Orderful id, NS record id, tranid. See [`skills/which-script-ran`](../skills/which-script-ran/SKILL.md) for the full recipe.
+- **Retention is volume-purged and can be brutally short**: observed ~2 days on a busy production account (2M rows) vs ~48 days on a quiet dev account. Capture logs the same day; check the window first with `SELECT MIN(date), MAX(date) FROM scriptnote`.
+
 ### The marker pattern (do this BEFORE triggering anything)
 
-`scriptnote` has no time column, so "what did *my* run log?" is answered with an internalid high-water mark:
+The cleanest way to answer "what did *my* run log?" is an internalid high-water mark (immune to timezone/clock-skew concerns):
 
 ```sql
 -- 1. BEFORE triggering: capture the marker
@@ -153,6 +159,8 @@ Created NS records are linked via `customrecord_orderful_edi_trx_join` (see [rec
 
 ## The four flows
 
+These are the flows the monitoring tooling targets. For the **complete** entry-point map — the outbound UE default path (where most outbound work actually runs), buttons/WAs, the dedicated 846 MR, and every other script — see [script-execution-map.md](script-execution-map.md); for after-the-fact diagnosis (which script ran + reading logs by transaction id) see [`skills/which-script-ran`](../skills/which-script-ran/SKILL.md).
+
 ### 1. Inbound polling MR
 
 | | |
@@ -177,11 +185,10 @@ Verify: count OTs with `created >= t0`; optionally confirm the Orderful bucket d
 | Writes | OT → `Success` + NS record + `edi_trx_join` row; or `Error` + `customrecord_orderful_transaction_error` rows + `retry_count`++; `Stale` once retries ≥ `custscript_orderful_inbound_max_retries` (default 3) |
 | Key log titles | `Inbound Processing - map` ("Beginning to process NetSuite Orderful Transaction internalid: {id}, Orderful ID: {oid}" — **your per-OT correlation hook**), `Entity lookup result`, `starting mapJsonata`/`finished mapJsonata`, `reduce: processBdo error`, `Failed to create SALES_ORDER`, `summarize` ("Map Error - key: {OT id}, error: {json}") |
 
-**The 10-minute freshness trap.** The batch path filters to OTs whose `lastmodified` is **older than 10 minutes** (the in-code deployment check compares `deploymentId` to the *script* id, so in practice the filter applies on every deployment). Consequences:
+**The ~10-minute freshness gate — weaker than it looks (mechanism corrected July 2026, verified in source + live).** The in-code deployment check compares `deploymentId` to the *script* id — never equal — so the gate nominally applies on every deployment. **But** the OT's `lastmodified` comes back from SuiteQL **date-only** (verified live: `"7/14/2026"`) and parses to *midnight* of the modified day, so "older than 10 minutes" is true any time after 00:10 — in practice the gate only excludes records during roughly **00:00–00:10** account time. Consequences:
 
-- The chained run that fires seconds after polling usually processes **zero of the OTs that polling just created**. Expect `mapKeys: {}` in its SUMMARY. Fresh OTs get picked up by a scheduled cycle ≥10 minutes later.
-- The `custscript_orderful_single_inbound` path (reprocess) loads the record directly and **bypasses the filter** — that's why reprocessing a specific id works instantly while "wait for the batch" doesn't.
-- So: to push one fresh OT through *now*, reprocess it by id. To test the batch path, wait out the 10 minutes before concluding anything is broken.
+- Don't reach for the gate to explain a fresh OT the chained run skipped. If the post-poll chained run shows `mapKeys: {}`, check whether the poll actually created OTs (it chains unconditionally, even on empty polls) and whether they pass the pending-query filters (status, direction, `pending_transactions` null) — those, not the gate, are the usual reasons.
+- The `custscript_orderful_single_inbound` path (reprocess) loads the record directly and bypasses the batch query entirely — still the reliable way to push one specific OT through *now*.
 
 ### 3. Reprocess (single or many)
 
