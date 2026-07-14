@@ -2,7 +2,9 @@
 
 Reference doc for the custom records the Orderful SuiteApp creates and uses. Skills cite this so Claude has accurate field names + relationships when querying. Pulled from the connector's SDF object definitions.
 
-> **When you query these records via SuiteQL**: the table name in SuiteQL is the same as the record's `scriptid` (e.g. `customrecord_orderful_item_lookup`). MULTISELECT fields are exposed via auto-generated mapping tables prefixed `map_` (e.g. `map_customrecord_orderful_item_lookup_custrecord_orderful_item_customer`).
+> **When you query these records via SuiteQL**: the table name in SuiteQL is the same as the record's `scriptid` (e.g. `customrecord_orderful_item_lookup`). MULTISELECT fields (and other relationship-backed fields) are exposed via auto-generated mapping tables prefixed `map_` (e.g. `map_customrecord_orderful_item_lookup_custrecord_orderful_item_customer`), where `mapone` = this record's id and `maptwo` = the referenced record's id.
+>
+> **Gotcha — don't filter a multiselect/relationship field directly.** `WHERE custrecord_orderful_item_customer = '123'` runs without error but silently returns **0 rows** — the column isn't a scalar. A plain `SELECT` of it returns the referenced id (e.g. `392`), but string functions on it return the literal text `RELATIONSHIP FIELD` (and `LENGTH()` = 18) — that's the tell you're looking at one of these. Filter through the `map_` table instead: `JOIN map_<record>_<field> m ON m.mapone = <record>.id WHERE m.maptwo = :referenced_id`.
 
 ## `customrecord_orderful_item_lookup` — Item Lookup
 
@@ -142,17 +144,34 @@ ORDER BY custrecord_ord_tran_orderful_date DESC;
 
 (SELECT-field internal IDs can be discovered via `getSelectValue` or by inspecting an example record.)
 
-## `customrecord_orderful_transaction_error` — Per-line Error Detail
+## `customrecord_orderful_transaction_error` — Error Detail
 
-When a transaction fails, this record holds line-level detail. Multiple error rows can exist per transaction.
+When a transaction fails, this record holds the error detail. Multiple error rows can exist per transaction (one per retry/attempt), so the rows read as a failure timeline.
 
-Most relevant fields:
+| Script ID | Type | Notes |
+|---|---|---|
+| `custrecord_orderful_error_transaction` | SELECT | Link back to the parent `customrecord_orderful_transaction` — holds that record's **internal id**, not the Orderful id. |
+| `custrecord_orderful_error_message` | TEXTAREA | The error text. Native-path failures give a clean code/message (e.g. `ITEM_LOOKUP_MISSING`); JSONata / SO-save failures give the raw SuiteScript error JSON (e.g. `USER_ERROR: "Please choose an item to add"`). |
+| `custrecord_orderful_error_type` | SELECT | Error category. |
+| `custrecord_orderful_error_resolved` | CHECKBOX | Whether the error has been marked resolved. |
 
-- A reference back to the parent `customrecord_orderful_transaction`
-- The error code (e.g. `ITEM_LOOKUP_MISSING`)
-- The line / segment context (which `PO1` loop, which qualifier values were tried)
+**Pulling the errors for a specific transaction is a two-step lookup**, because the link field holds the NS record id, not the Orderful transaction id:
 
-(Schema details: see `Objects/customrecord_orderful_transaction_error.xml` in the SuiteApp source for the full field list.)
+```sql
+-- 1. resolve the transaction record's internal id from the Orderful id
+SELECT id FROM customrecord_orderful_transaction
+WHERE custrecord_ord_tran_orderful_id = '<orderful-txn-id>';
+
+-- 2. pull its error rows, newest first
+SELECT custrecord_orderful_error_message, custrecord_orderful_error_type, created
+FROM customrecord_orderful_transaction_error
+WHERE custrecord_orderful_error_transaction = '<record-id-from-step-1>'
+ORDER BY created DESC;
+```
+
+Reading the message history is the fastest way to see a transaction's failure timeline (e.g. `JSONata mapper is required` → repeated `Please choose an item to add` → `Stale - Max Retries Exceeded`).
+
+(For the full field list, see `Objects/customrecord_orderful_transaction_error.xml` in the SuiteApp source.)
 
 ## `customrecord_orderful_diagnostic` — Diagnostic Log
 

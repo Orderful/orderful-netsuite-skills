@@ -302,27 +302,28 @@ The `<!-- orderful-claude-review -->` marker at the top is required — it ident
     gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file review.md
     ```
 
-3. Submit the formal review using the severity → action mapping:
+3. **Record the verdict for CI.** Compute the verdict from the highest severity found and write
+   it — exactly one lowercase word, nothing else — to a file named `.claude-review-verdict` in
+   the repository root (your working directory) using the Write tool. Do **not** call
+   `gh pr review` (this CI token cannot `--approve`; the authoritative, *counting* review is
+   issued as `orderful-bot` by the `submit-verdict` job, which reads this verdict as the
+   `review` job's output — bound to this run rather than scraped from the PR).
 
-    | Highest severity in review | Action              |
-    | -------------------------- | ------------------- |
-    | Any 🔴 CRITICAL            | `--request-changes` |
-    | Any 🟠 MAJOR (no 🔴)       | `--comment`         |
-    | Only 🟡 MINOR / ⚪ TRIVIAL | `--approve`         |
-    | No findings                | `--approve`         |
+    | Highest severity in review | `.claude-review-verdict` contents |
+    | -------------------------- | --------------------------------- |
+    | Any 🔴 CRITICAL            | `request-changes`                 |
+    | Any 🟠 MAJOR (no 🔴)       | `comment`                         |
+    | Only 🟡 MINOR / ⚪ TRIVIAL | `approve`                         |
+    | No findings                | `approve`                         |
 
-    ```bash
-    gh pr review "$PR_NUMBER" --request-changes --body "Critical findings — see review comment above."
-    # or
-    gh pr review "$PR_NUMBER" --comment --body "Found N issue(s) — see review comment above."
-    # or
-    gh pr review "$PR_NUMBER" --approve --body "Looks good."
-    ```
+    A partial/timeout review (see Timeout awareness) MUST write `comment`, never `approve` — an
+    incomplete review must not become a counting approval. If the file is never written, CI
+    treats the verdict as `none` and issues no counting review (fail-safe default).
 
 ## Re-trigger note
 
-If the author addresses findings and a maintainer re-applies the `claude-review` label, this skill re-runs. Each invocation is independent (no previous-review fetching in this minimal setup) — a fresh approval supersedes a prior request-changes, unblocking the PR.
+If the author addresses findings and a maintainer re-applies the `claude-review` label, this skill re-runs. Each invocation is independent (no previous-review fetching in this minimal setup). A fresh run writes a new verdict, and the `submit-verdict` job reconciles the `orderful-bot` review accordingly — a non-`approve` verdict dismisses any prior `orderful-bot` approval or change-request (across commits), so the bot's standing state always matches the latest run.
 
 ## Timeout awareness
 
-The CI workflow has a 30-minute timeout. If you are approaching it, submit a partial review with findings gathered so far. A partial review with clear severity classification beats no review.
+The CI workflow has a 30-minute timeout. If you are approaching it, submit a partial review with findings gathered so far — and write `comment` (never `approve`) to `.claude-review-verdict`, since an incomplete review must not auto-approve. A partial review with clear severity classification beats no review.
