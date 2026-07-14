@@ -19,6 +19,8 @@ Use when the user says any of:
 
 If the user is asking about a different failure mode (a stuck 855, a packing-group issue, a field-mapping problem), do NOT load this skill — it's specific to inbound-850 item-lookup failures.
 
+**Non-native inbound types (875, etc.) do NOT resolve items through `customrecord_orderful_item_lookup` on the native path.** Only `850`, `860`, `945`, `944`, `947` (`NATIVE_SUPPORTED_INBOUND_TRX_TYPES`) run the built-in item-lookup resolution this skill describes. Everything else — including the **875** (Grocery Products PO) — is processed entirely through the customer's **JSONata** mapping. Those mappings typically resolve items by UPC against the NetSuite item master (`$lookupItems($upc, "upccode")`) and do **not** read the item-lookup table unless the JSONata explicitly calls `$lookupItemMappings`. So for a failing 875/non-native transaction, editing (or adding rows to) the item-lookup table has no effect unless the mapping is wired to consult it — debug the JSONata (see [`writing-inbound-jsonata`](../writing-inbound-jsonata/SKILL.md)), not the lookup table. (The inactive-item caveat still applies either way: the connector's lookup joins filter `item.isinactive != 'T'`, and NetSuite won't put an inactive item on a transaction — a single unresolvable line fails the whole PO.)
+
 ## Prerequisites
 
 This skill assumes the user has already run the `netsuite-setup` skill for the customer in question. That skill creates `~/orderful-onboarding/<customer-slug>/.env` containing `NS_SB_*` / `NS_PROD_*` TBA credentials and `ORDERFUL_API_KEY`, plus an `ENVIRONMENT=sandbox|production` selector.
