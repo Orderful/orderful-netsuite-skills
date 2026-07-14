@@ -40,6 +40,17 @@ In the customer's NetSuite:
 3. **Save**.
 4. NetSuite will show you the **Token ID** and **Token Secret** **once**. Copy both into the `.env` file immediately — use `NS_SB_TOKEN_ID` / `NS_SB_TOKEN_SECRET` for a sandbox account, or `NS_PROD_*` for production.
 
+### Gotcha — your user won't appear in the User dropdown (even as Administrator)
+
+On **Access Tokens > New**, it's common to find that your user simply isn't selectable in the **User** field, so you can't create the token — and this happens even when you're logged in as Administrator (which already has the "Log in using Access Tokens" permission, so the usual "add the permission" advice doesn't apply). Two fixes, in order:
+
+1. **Select `Application Name` first.** The **User** list frequently stays empty until the integration is chosen. If you were typing into User before picking the app, that alone explains the empty list.
+2. **Use the self-service path — it bypasses the User dropdown entirely.** This creates a token for your *current* login (no user/role picking):
+   - **Home** dashboard → **Settings** portlet → **Manage Access Tokens** → **New My Access Token** → set **Application Name** to your integration → **Save**. The User/Role auto-fill to you + your current role.
+   - If the "Manage Access Tokens" link isn't in the Settings portlet, add the portlet via **Personalize Dashboard**.
+
+The self-service route is the reliable way to mint *your own* token; the admin "create a token for another user" form is finicky about populating the User list. (This wasted real time during an escalation — reach for the self-service path first.)
+
 ## Required role permissions
 
 The role on the access token needs all of these. Set on **Setup > Users/Roles > Manage Roles > [role] > Permissions**:
@@ -66,6 +77,18 @@ NetSuite custom records have an **Access Type** setting that controls how permis
 - ❌ The custom record's own **Permissions** tab is ignored
 
 It's a quirk of NetSuite's permission model. The natural place to grant access — adding "Custom Record: Orderful Transaction" with Edit on the role's Custom Record subtab — is exactly the wrong place. Always use the Lists subtab's "Custom Record Entries" entry instead.
+
+## Setting the Orderful API Secret (SuiteApp → Orderful)
+
+Separate from the TBA credentials above: the SuiteApp itself authenticates *outbound* to Orderful using a NetSuite **API Secret** record. The Orderful Setup page (**Orderful EDI > Orderful Setup > Setup**) reads it to connect. It must have the exact script ID **`custsecret_orderful_api`**, set to the org's Orderful API key. Symptom of a wrong/missing ID: the Setup page errors with *"Could not connect to Orderful. Make sure an API Secret with ID `custsecret_orderful_api` exists and is set to a valid Orderful API key."*
+
+Create it via **Setup > Company > API Secrets > New** (or the link on the Orderful Setup page):
+
+- **ID / Script ID**: type only **`orderful_api`**. NetSuite **auto-prepends `custsecret_`**, producing the required `custsecret_orderful_api`. Do **not** type the full `custsecret_orderful_api` — you'll end up with `custsecret_custsecret_orderful_api` and the SuiteApp won't find it.
+- **Password / value**: the org's Orderful API key.
+- Restrictions: uncheck **"Available to your entire SuiteApp"** and set domain/script restrictions per your security posture.
+
+The script ID **cannot be edited after saving** — there's no rename. If it came out wrong (e.g. the doubled `custsecret_` prefix), **delete the secret and create a new one** with the correct ID.
 
 ## Step 3 — Verify
 
