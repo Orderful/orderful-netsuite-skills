@@ -103,6 +103,21 @@ jobs:
                     -exec rm -rf -- {} +
                   echo "Stripped all PR-controlled Claude config paths from pr-head."
 
+            # Optional: mint a GitHub App token so the review is authored by an App
+            # identity instead of github-actions[bot]. Approvals from GITHUB_TOKEN do
+            # NOT count toward required approving reviews; approvals from an App do.
+            # Requires a GitHub App (with pull-requests:write) installed on the repo,
+            # with its id in the CLAUDE_REVIEW_APP_ID variable and private key in the
+            # CLAUDE_REVIEW_APP_PRIVATE_KEY secret. continue-on-error keeps the review
+            # working (as a non-counting comment) when the app isn't provisioned yet.
+            - name: Mint review-identity app token (optional)
+              id: app-token
+              continue-on-error: true
+              uses: actions/create-github-app-token@a8d616148505b5069dccd32f177bb87d7f39123b # v2.0.6
+              with:
+                  app-id: ${{ vars.CLAUDE_REVIEW_APP_ID }}
+                  private-key: ${{ secrets.CLAUDE_REVIEW_APP_PRIVATE_KEY }}
+
             - name: Run Claude Code Review
               uses: anthropics/claude-code-action@e90deca47693f9457b72f2b53c17d7c445a87342 # v1.0.171
               env:
@@ -112,13 +127,20 @@ jobs:
                   BASE_SHA: ${{ github.event.pull_request.base.sha }}
               with:
                   claude_code_oauth_token: ${{ secrets.ORDERFUL_BOT_CLAUDE_CODE_OAUTH_TOKEN }}
-                  # Bypass the Anthropic OIDC exchange, which 401s on
-                  # pull_request_target events. See anthropics/claude-code-action#713.
-                  github_token: ${{ secrets.GITHUB_TOKEN }}
+                  # GitHub API token for the review's gh operations (comments + approval).
+                  # Prefer the App token so an "approve" counts toward required reviews;
+                  # fall back to GITHUB_TOKEN (comments only, non-counting) when the App
+                  # isn't configured. Either way this also bypasses the Anthropic OIDC
+                  # exchange, which 401s on pull_request_target (claude-code-action#713).
+                  github_token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
                   use_sticky_comment: true
                   include_fix_links: false
                   prompt: |
                       Invoke Skill(code-review) with args "--pr ${{ github.event.pull_request.number }} --comment".
+                      After the review is posted, submit a review verdict as this workflow's identity:
+                      - If there are NO blocking findings (nothing in the correctness or security categories), approve:
+                        `gh pr review ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --approve --body "Automated Claude review: no blocking issues found."`
+                      - If there ARE blocking findings, do NOT approve — leave the inline comments only.
                   claude_args: |
                       --max-turns 50
                       --model opus[1m]
