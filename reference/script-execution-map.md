@@ -19,13 +19,13 @@ Companions:
 | Doc type | Processing script | Creates | Log home(s) |
 |---|---|---|---|
 | 850 | `customscript_orderful_transaction_mr` → `850/createSalesOrder.ts` | Sales Order | "Orderful \| Transaction Process" (all 3 deployments) |
-| 860 | same MR → `BuyerRequestedChangeOrderService` | SO line updates | same |
-| 945 | same MR → `PartnerFulfillmentService.processPartnerFulfillmentResponse` | Item Fulfillment | same |
-| 944 | same MR → `processPartnerReceiveResponse` | Item Receipt | same |
-| 947 | same MR → `InventoryAdjustment947ReduceService` | Inventory Adjustment | same |
-| 864 (vendor sender) | same MR → `864/textMessageHandler.ts` | Note | same |
+| 860 | `customscript_orderful_transaction_mr` → `BuyerRequestedChangeOrderService` | SO line updates | "Orderful \| Transaction Process" (all 3 deployments) |
+| 945 | `customscript_orderful_transaction_mr` → `PartnerFulfillmentService.processPartnerFulfillmentResponse` | Item Fulfillment | "Orderful \| Transaction Process" (all 3 deployments) |
+| 944 | `customscript_orderful_transaction_mr` → `processPartnerReceiveResponse` | Item Receipt | "Orderful \| Transaction Process" (all 3 deployments) |
+| 947 | `customscript_orderful_transaction_mr` → `InventoryAdjustment947ReduceService` | Inventory Adjustment | "Orderful \| Transaction Process" (all 3 deployments) |
+| 864 (vendor sender) | `customscript_orderful_transaction_mr` → `864/textMessageHandler.ts` | Note | "Orderful \| Transaction Process" (all 3 deployments) |
 | SIMPLIFIED_PURCHASE_ORDER | `customscript_simplified_in_process_mr` | Sales Order | "Simplified Inbound Processing MapReduce" |
-| anything else | same MR, **generic JSONata path** (requires ETT JSONata + v1/v2 writeback config) | per mapping | "Orderful \| Transaction Process" |
+| anything else | `customscript_orderful_transaction_mr`, **generic JSONata path** (requires ETT JSONata + v1/v2 writeback config) | per mapping | "Orderful \| Transaction Process" (all 3 deployments) |
 | *ingest itself* (record never appeared) | `customscript_orderful_inbound_mr` | the OT record | "Orderful \| Polling Inbound Transactions" |
 
 **Outbound** (NetSuite → Orderful). The default path is **synchronous in the User Event** — for most problems the UE deployment matching the source record type is the log to read.
@@ -138,7 +138,7 @@ Check the record before any log. Full field/status semantics: outbound-dispatch.
 |---|---|---|
 | Expected inbound never became an OT record | — | Poller log: `failUnsupportedTransactionType`, `Max Content Size Exceeded`, `Sandbox: skipping LIVE inbound transaction` |
 | Inbound OT stuck Pending | `retry_count`, `pending_transactions` | Processing MR (all 3 deployments): `Inbound Processing - map` + the OT's internalid |
-| Inbound OT stuck Pending, `pending_transactions` non-null | that field | same log: `summarize`, `Reduce Error` — MR died between map and summarize |
+| Inbound OT stuck Pending, `pending_transactions` non-null | that field | Processing MR (`customscript_orderful_transaction_mr`, all 3 deployments): `summarize`, `Reduce Error` — MR died between map and summarize |
 | Inbound Error, "See Validation Tab…" | child `customrecord_orderful_transaction_error` rows; `validation_results` entries with `result:false` | usually none needed; else `inboundDataProcess` / `createSalesOrder` |
 | Stale status | `retry_count` ≥ max | `Transaction marked as Stale`, then the earliest failing `Inbound Processing - map` |
 | Stuck Pending - Custom Process | by design | the **customer's** script log, not the SuiteApp's |
