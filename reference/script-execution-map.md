@@ -8,6 +8,9 @@ Companions:
 - [`skills/which-script-ran`](../skills/which-script-ran/SKILL.md) — the diagnosis recipe that drives this map, including **programmatic log reading via SuiteQL** (no NetSuite UI).
 - [mapreduce-monitoring.md](mapreduce-monitoring.md) — watching a live MR run (task status + logs + outputs).
 - [outbound-dispatch.md](outbound-dispatch.md) — deep detail on the UE dispatch gates.
+- [record-types.md](record-types.md) — field/status semantics for the OT, join, and error records this map routes around.
+- [900-series-lifecycle.md](900-series-lifecycle.md) — 940/943/944/945 business cases and record flows (the map only carries the one-word source/creates cells).
+- [settings-architecture.md](settings-architecture.md) — how ETT/customer/subsidiary settings (consolidation method, handling prefs) resolve.
 - [`skills/inspect-inbound-diagnostics`](../skills/inspect-inbound-diagnostics/SKILL.md) — the inbound BDO trace record.
 
 ---
@@ -82,7 +85,7 @@ All ship at deployment log level **DEBUG** except where noted. "Ships NOTSCHEDUL
 |---|---|---|
 | `customscript_orderful_button_handler_sl` | Orderful Button Handler SL | Backend for **every** record-page button (§4). Synchronous work logs here; catch-all marker `Error while processing function: <BUTTON_FUNCTION>` |
 | `customscript_orderful_spa_api_sl` | SPA API | The SPA's credentialed server actions: `validateApiKey`, `get/saveIsaConfig`, `get/savePollingConfig` (**flips the poller deployment schedule**), `runInboundPoller` (sets `custscript_oprun_run_id = manual:<ts>-<rand>`), `getPollerStatus`, `saveSubsidiaryDefaults`. Markers: `action`, `SPA API Error` |
-| `customscript_orderful_agent_write_rl` | Orderful Agent Write Restlet | Actions: `triggerInboundPolling`, `reprocessTransaction` (requires `authorizedBy` + `agentPlanId`). Markers: `agentWrite: action invoked` / `: error` / `: unknown action` / `: missing attribution fields`. Audience locked to `customrole_orderful_agent_writer` |
+| `customscript_orderful_agent_write_rl` | Orderful Agent Write Restlet | Actions as of v1.22: `triggerInboundPolling`, `reprocessTransaction` (requires `authorizedBy` + `agentPlanId`). The inventory is growing (outbound-trigger actions are in flight) — `orderful_agentWrite_RL.ts`'s `AgentWriteAction` enum is the source of truth. Markers: `agentWrite: action invoked` / `: error` / `: unknown action` / `: missing attribution fields`. Audience locked to `customrole_orderful_agent_writer` |
 | testHook RESTlet | (hand-created; **no SDF object**) | Dev/QA accounts only; e2e targets numeric ids via `NS_RESTLET_ID`/`NS_RESTLET_DEPLOY_ID`. All markers prefixed `testhook:` |
 | 7 workflow actions: `customscript_orderful_generate_810/855/856/940_wa`, `customscript_orderful_generate_send_wa` (⚠️ deploy id abbreviated: `customdeploy_orderful_gen_send_wa`), `customscript_orderful_reprocess_wa`, `customscript_orderful_send_orderful_wa` | Orderful \| … WA | Thin wrappers over the same `action.handlers.ts` the buttons use. **No shipped workflow invokes them** — the 3 shipped `customworkflow` objects are field-display only; WAs run only where a customer account wired its own workflow. Click logs in the WA's own log; work logs downstream |
 | `customscript_orderful_itemfulfillment_cs`, `customscript_orderful_enabled_config_cs` (⚠️ ships log level **ERROR**), `orderful_buttonHandler_CM` (module — no script record) | client scripts | **Client context: their log calls never persist to any execution log** — failures surface in the browser console / user dialogs only |
@@ -100,7 +103,7 @@ All ship at deployment log level **DEBUG** except where noted. "Ships NOTSCHEDUL
 3. **Reprocess** (button `RE_PROCESS` / `customscript_orderful_reprocess_wa` / agent-write `reprocessTransaction` — all → `handleReprocess`): resets retry_count, Stale→Pending, then task.creates the processing MR with `custscript_orderful_single_inbound` — this path **loads the record directly** and skips the batch query. Trigger logs where clicked; work logs in the processing MR.
 4. **Custom process**: OTs at **Pending - Custom Process** are *deliberately never touched again by the SuiteApp* — a **customer-owned script** must consume them and flip the status itself. Stuck there forever ⇒ the customer's script is missing/broken; its log home is the **customer's** deployment, not any Orderful script.
 
-The **~10-minute freshness gate**, corrected against source (July 2026): the deployment check compares `deploymentId !== scriptId` — always true — so the gate nominally applies to *every* deployment. **But** `lastmodified` is read date-only (parses to midnight), so "older than 10 minutes" is true any time after 00:10 — in practice the gate only excludes records during **00:00–00:10**. Don't reach for it to explain a stuck OT; check the SUMMARY beacon's `mapKeys` and the pending-query filters instead.
+The **~10-minute freshness gate** is near-vacuous: in practice it only excludes records during roughly **00:00–00:10** account time (full corrected mechanism + consequences: [mapreduce-monitoring.md](mapreduce-monitoring.md) flow 2). Don't reach for it to explain a stuck OT; check the SUMMARY beacon's `mapKeys` and the pending-query filters instead.
 
 ### Outbound chain
 

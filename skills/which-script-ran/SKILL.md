@@ -30,7 +30,7 @@ node samples/suiteql.mjs ~/orderful-onboarding/<slug> "<SQL>"
 
 ## Step 0 — HURRY: logs evaporate
 
-`scriptnote` retention is **volume-purged**: observed ~**2 days** on a busy production account (2M rows) vs ~48 days on a quiet dev account. If the incident is being reported live, capture logs **now**, before finishing the record-level analysis. Check the window first:
+`scriptnote` retention is **volume-purged** and can be as short as ~2 days on a busy production account (observed windows: [mapreduce-monitoring.md](../../reference/mapreduce-monitoring.md) Layer 2). If the incident is being reported live, capture logs **now**, before finishing the record-level analysis. Check the window first:
 
 ```sql
 SELECT TO_CHAR(MIN(date),'YYYY-MM-DD') AS oldest, TO_CHAR(MAX(date),'YYYY-MM-DD') AS newest, COUNT(*) AS total FROM scriptnote
@@ -40,7 +40,7 @@ If the incident predates `oldest`, the logs are gone — fall back to record sur
 
 ## Step 1 — read the record before any log
 
-The OT record answers most questions without logs (full semantics in the map §5 and mapreduce-monitoring layer 3):
+The OT record answers most questions without logs. This is a diagnosis-tailored variant of mapreduce-monitoring Layer 3's spot-check query (that doc owns the field/status semantics):
 
 ```sql
 SELECT ot.id, st.scriptid AS status, BUILTIN.DF(ot.custrecord_ord_tran_document) AS doc,
@@ -54,7 +54,7 @@ LEFT JOIN customlist_orderful_transaction_status st ON st.id = ot.custrecord_ord
 WHERE ot.id = <otId>  -- or: ot.custrecord_ord_tran_orderful_id = '<orderfulId>'
 ```
 
-Interpretation shortcuts: **ReadyToSend** = generation crashed mid-flight; **Pending outbound + orderful_id** = waiting on the status MR; **error = 'See Validation Tab…'** = read the child `customrecord_orderful_transaction_error` rows; **pending_count non-null** = inbound MR died between map and summarize.
+Interpret what comes back against the map's §5 symptom table (e.g. **ReadyToSend** = generation crashed mid-flight) — the map owns those conclusions and the mechanisms behind them.
 
 ## Step 2 — the lifecycle query (the main move)
 
@@ -100,23 +100,22 @@ WHERE n.date >= SYSDATE - 1 AND s.scriptid LIKE 'customscript_orderful%'
 GROUP BY s.scriptid, n.type ORDER BY s.scriptid
 ```
 
-Key `scriptnote` facts (verified July 2026, accounts TD2817593 + a 2M-row prod):
-- Columns: `internalid`, `date` (datetime — **`TO_CHAR` exposes the time**), `type` (`DEBUG|AUDIT|ERROR|EMERGENCY|SYSTEM`), `title`, `detail` (full), `scripttype` (→ join `script`). **No deployment column** — logs are per *script*, which is a feature: multi-deployment scripts (UE ×6, processing MR ×3, status MR ×5, cons ×11) need no deployment guessing.
-- `Prefer: transient` header (the runner sets it) keeps polling queries from piling up as saved searches.
-- Timezone is account-local — anchor windows with `SELECT TO_CHAR(SYSDATE,'YYYY-MM-DD HH24:MI:SS') FROM DUAL`, not your laptop clock.
+Key facts (full `scriptnote` column contract, marker pattern, and SUMMARY-beacon semantics live in [mapreduce-monitoring.md](../../reference/mapreduce-monitoring.md) Layer 2):
+- **No deployment column** — logs are per *script*, which is a feature: multi-deployment scripts (see map §2 for the counts) need no deployment guessing.
+- Timezone is account-local — anchor windows to the account's `SYSDATE`, not your laptop clock (the anchor idiom: mapreduce-monitoring Layer 1).
 
 ## Step 4 — interpret absence correctly
 
 A missing log line is only evidence if it *would have* persisted:
 
-1. **Deployment log level** gates persistence — a deployment at ERROR keeps nothing from a clean run; AUDIT drops DEBUG lines. Check with:
+1. **Deployment log level** gates persistence (the rule + live observation: map §6 and mapreduce-monitoring's SUMMARY-row caveat). Check this account's levels with:
    ```sql
    SELECT sd.scriptid, sd.status, sd.isdeployed, sd.loglevel
    FROM scriptdeployment sd JOIN script s ON s.id = sd.script
    WHERE s.scriptid = '<scriptid>'
    ```
-   (Also confirms which deployment is actually SCHEDULED in *this* account — the repo ships nearly everything NOTSCHEDULED.)
-2. **Client-context scripts never persist logs** (client scripts, the button client module, SPA client) — browser console only.
+   (Also shows which deployment is actually SCHEDULED in *this* account — shipping defaults: map §2.)
+2. **Client-context scripts never persist logs** — browser console only (map §6).
 3. **Retention** (step 0) — absence of *old* logs proves nothing.
 4. The scenario may live in a **different host** than assumed — e.g. "Generate 856" button work logs in the **UE**, not the Suitelet; reprocess work logs in the **processing MR**, not the RESTlet. Route via the map §4.
 
@@ -130,6 +129,5 @@ A missing log line is only evidence if it *would have* persisted:
 ## Gotchas
 
 - The UI "Execution Log" tab is per-deployment; `scriptnote` is per-script. If someone insists "the log is empty" in the UI, they may be on the wrong deployment — the SuiteQL read is authoritative.
-- Two scripts share the literal deployment id `customdeploy1` (Bulk Unpack MR, Outbound RunControl MR); two script records share the UI name "Orderful Settings Migration" (install script vs migration MR). Route by scriptId, always.
+- Identifier collisions exist — duplicate `customdeploy1` deployment ids, duplicate "Orderful Settings Migration" UI names. Route by scriptId, always (the specific collisions: map §6).
 - MR **task/stage status** is a different table (`scheduledscriptinstance`, no script column, correlate by taskid/time) — that's monitor-mr territory.
-- An OT stuck **Pending - Custom Process** is processed by a *customer-owned* script — its logs are under the customer's script record, not any `customscript_orderful_*`.

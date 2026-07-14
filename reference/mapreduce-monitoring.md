@@ -87,7 +87,7 @@ The per-deployment "Execution Log" UI tab is the `scriptnote` table. Restricted 
 Three facts that make `scriptnote` more useful than this MR-focused doc implies (July 2026, verified live):
 
 - **It holds every server-side script's logs** — User Events, Suitelets, RESTlets, and WAs too, not just MRs. Because it's keyed per *script* (no deployment column), multi-deployment scripts (the NS Transaction Handler UE ×6, processing MR ×3, status MR ×5) need no deployment guessing.
-- **The lifecycle query**: `WHERE detail LIKE '%<id>%'` with *no script filter* reconstructs everything every script logged about one transaction, in order (`ORDER BY internalid`), in a single query — verified 0.8 s over 2M rows. Try each handle you have: OT internal id, Orderful id, NS record id, tranid. See [`skills/which-script-ran`](../skills/which-script-ran/SKILL.md) for the full recipe.
+- **The lifecycle query**: `WHERE detail LIKE '%<id>%'` with *no script filter* reconstructs everything every script logged about one transaction in a single query. The full recipe (correlation handles, window, verified performance) lives in [`skills/which-script-ran`](../skills/which-script-ran/SKILL.md).
 - **Retention is volume-purged and can be brutally short**: observed ~2 days on a busy production account (2M rows) vs ~48 days on a quiet dev account. Capture logs the same day; check the window first with `SELECT MIN(date), MAX(date) FROM scriptnote`.
 
 ### The marker pattern (do this BEFORE triggering anything)
@@ -218,7 +218,7 @@ Primary outbound dispatch is **synchronous in the User Event** — see [outbound
 | `customscript_orderful_outbound_sending` (deploys `customdeploy2` = generate+send, `customdeploy_orderful_status_send_deploy` = send-only sweeper) | Picks OTs `Ready To Send` + direction `Out`, POSTs to Orderful | `getInputData` ("ready to send transactions: …"), `Outbound Transaction Sending: map` ("Orderful transaction {id} created in Orderful") |
 | `customscript_orderful_outbound_status_mr` (scheduled 15-min) | Polls Orderful `validationStatus` for `Pending` outbound OTs → flips to `Success` / `Error` ("Review transaction in Orderful") | `status response` |
 
-**There is no sanctioned remote trigger for these.** The agent-write RESTlet exposes only `triggerInboundPolling` and `reprocessTransaction`. To nudge outbound, use product paths (flip `custbody_orderful_ready_to_process_*` on the source record to re-fire the UE) or run the deployment from the NS UI. Monitoring works the same regardless of how a run started: scriptnote marker → SUMMARY beacon → OT/orderful-id verification.
+**There is no sanctioned remote trigger for these as of v1.22** (the canonical agent-write action inventory — which is growing — lives in [script-execution-map.md](script-execution-map.md) §2). To nudge outbound, use product paths (flip `custbody_orderful_ready_to_process_*` on the source record to re-fire the UE) or run the deployment from the NS UI. Monitoring works the same regardless of how a run started: scriptnote marker → SUMMARY beacon → OT/orderful-id verification.
 
 Verify outbound output: the OT gains `custrecord_ord_tran_orderful_id` and flips `Ready To Send`→`Pending`→(status MR)→`Success`. A `Pending` OT with `msg_len` tiny/placeholder and no orderful id = generation short-circuited (see the oversized-message and handling-preference-gate gotchas in [outbound-dispatch.md](outbound-dispatch.md) — as of SuiteApp v1.22.0 the dispatch gate is the per-doc-type handling preference, not the old `auto_send_asn` flag).
 
