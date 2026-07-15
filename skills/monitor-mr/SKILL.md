@@ -34,7 +34,7 @@ The cardinal rule: **capture markers before triggering, then watch, then verify 
    - Reports the MR SUMMARY (`mapErrors`/`reduceErrors`) and any new taskids — polling chains the processing + simplified MRs unconditionally within seconds of completing, even when it polled nothing.
 3. Verify output: new OTs created since the poll —
    `SELECT COUNT(*) FROM customrecord_orderful_transaction WHERE created >= <t0>` or `ot` mode on specific ids.
-4. **Set expectations on the chained processing run:** it fires seconds after polling but its batch query skips OTs modified <10 minutes ago, so freshly-polled OTs usually wait for a scheduled cycle. If the user needs one OT processed *now*, hand off to [reprocess-transaction](../reprocess-transaction/SKILL.md) (the single-id path bypasses the filter).
+4. **Set expectations on the chained processing run:** it fires seconds after polling and normally picks up freshly-polled OTs — the nominal 10-minute freshness gate is near-vacuous, biting only ~00:00–00:10 account time (mechanism: [reference/mapreduce-monitoring.md](../../reference/mapreduce-monitoring.md) flow 2). If an OT wasn't picked up, suspect the pending-query filters (status, direction, `pending_transactions`), or push it through *now* with [reprocess-transaction](../reprocess-transaction/SKILL.md) (the single-id path bypasses the batch query entirely).
 
 ### B. Watching a reprocess (no taskId is returned)
 
@@ -49,11 +49,11 @@ The cardinal rule: **capture markers before triggering, then watch, then verify 
 
 ### C. Inbound processing on its own schedule
 
-`node monitor-mr.mjs <dir> watch --flow inbound-processing --ot <ids> --timeout 1200` — no trigger, just wait for the next scheduled cycle's SUMMARY beacon and check the OTs. Remember the 10-minute freshness filter when judging "why wasn't it picked up".
+`node monitor-mr.mjs <dir> watch --flow inbound-processing --ot <ids> --timeout 1200` — no trigger, just wait for the next scheduled cycle's SUMMARY beacon and check the OTs. If an OT wasn't picked up, suspect the pending-query filters (status, direction, `pending_transactions` null), not the near-vacuous 10-minute freshness filter.
 
 ### D. Outbound consolidation / sending
 
-There is **no sanctioned remote trigger** for these MRs (the agent-write RESTlet only exposes inbound polling and reprocess — and don't reach for the testHook RESTlet). Nudge outbound via product paths (flip `custbody_orderful_ready_to_process_*` to re-fire the UE — see [outbound-dispatch.md](../../reference/outbound-dispatch.md)) or run the deployment from the NS UI. Then monitor exactly as above: `watch --flow outbound-consolidation` (or `outbound-sending`) `--ot <ids>`. Outbound success = OT flips toward `Success` with `orderful_id` populated; follow up in Orderful with [fetch-validations](../fetch-validations/SKILL.md) if it lands `Error`/INVALID.
+There is **no sanctioned remote trigger** for these MRs as of v1.22 (the canonical agent-write action inventory lives in [script-execution-map.md](../../reference/script-execution-map.md) §2 — and don't reach for the testHook RESTlet). Nudge outbound via product paths (flip `custbody_orderful_ready_to_process_*` to re-fire the UE — see [outbound-dispatch.md](../../reference/outbound-dispatch.md)) or run the deployment from the NS UI. Then monitor exactly as above: `watch --flow outbound-consolidation` (or `outbound-sending`) `--ot <ids>`. Outbound success = OT flips toward `Success` with `orderful_id` populated; follow up in Orderful with [fetch-validations](../fetch-validations/SKILL.md) if it lands `Error`/INVALID.
 
 ### Ad-hoc forensics (no live run)
 
@@ -68,7 +68,7 @@ There is **no sanctioned remote trigger** for these MRs (the agent-write RESTlet
 - A `QUEUED` verdict that persists for minutes usually means a scheduled instance is in flight — wait, don't escalate.
 - "Task not visible yet" immediately after triggering is normal lag — poll again before concluding.
 - **A silent execution log is not a silent failure.** Deployments at log level ERROR persist nothing for a clean run (not even the SUMMARY). Judge by task verdict + OT state, and say so explicitly when reporting.
-- **A stale `lastmodified` is not proof the MR skipped the record.** If a record's map stage throws, the MR runs and errors without ever saving it — `retry_count` and `lastmodified` don't move (confirmed on a record that re-errors every cycle yet shows `retries=0`). For a known-broken OT, trust the taskid verdict and the AUDIT SUMMARY beacon, not OT movement. A run that keeps `OTS_UPDATED` from firing on such a record is expected, not a tool bug.
+- **A stale `lastmodified` is not proof the MR skipped the record.** If a record's map stage throws, the MR runs and errors without ever saving it — `retry_count` and `lastmodified` don't move (mechanism + live evidence: mapreduce-monitoring's SUMMARY-row caveats). For a known-broken OT, trust the taskid verdict and the AUDIT SUMMARY beacon, not OT movement. A run that keeps `OTS_UPDATED` from firing on such a record is expected, not a tool bug.
 - This skill is read-only by design. It never PATCHes records, never submits tasks, and is safe against production. Anything mutating (reprocess, flag flips) belongs to the trigger skills.
 - Quote exact ERROR log rows (name + message) when reporting failures — don't paraphrase stack traces into vagueness.
 - Timestamps from NetSuite are account-local; Orderful API timestamps are UTC. Reconcile before claiming latency numbers.

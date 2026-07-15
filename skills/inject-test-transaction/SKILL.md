@@ -157,3 +157,4 @@ After the test:
 - See the `bulk-jsonata-update` skill for sandbox-validation flows where this skill is the validation step.
 - See the `netsuite-setup` skill for the customer-creds wiring (`custentity_orderful_isa_id_test` is set there).
 - Orderful API: [POST /v3/transactions](https://docs.orderful.com/), [GET /v3/polling-buckets/{id}](https://docs.orderful.com/), [POST /v3/polling-buckets/{id}/confirm-retrieval](https://docs.orderful.com/).
+- [`monitor-mr`](../monitor-mr/SKILL.md) — watch the ingest run live; [`which-script-ran`](../which-script-ran/SKILL.md) — after-the-fact, reconstruct everything every script logged about the injected transaction id (one SuiteQL query).
