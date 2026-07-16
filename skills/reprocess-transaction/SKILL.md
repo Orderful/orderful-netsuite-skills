@@ -73,7 +73,7 @@ For **after-the-fact** diagnosis (the reprocess already ran, what did it log?) u
 |---|---|---|
 | `Error` | ✅ | The main case. Transaction failed; reprocess to retry. |
 | `Stale` | ✅ | `handleReprocess` explicitly resets Stale → Pending. This is a documented use case. |
-| `Pending` | ⚠️ Allowed but redundant | Already queued for the next MR pass. Reprocess will re-enqueue and reset the retry count — usually harmless but unnecessary. |
+| `Pending` | ⚠️ Allowed but counterproductive | The reprocess save bumps the record's last-modified time, and the inbound MR's bulk pass only picks up records older than its freshness window (~10 min observed) — so every reprocess restarts the clock and *delays* processing. Verified live: a Pending record poked repeatedly is never picked up. Leave Pending records alone. See [reference/suiteapp-known-issues.md](../../reference/suiteapp-known-issues.md). |
 | `AwaitingSiblings` | ⚠️ Allowed but rarely useful | Transaction is waiting for a related document. Reprocess won't fix the underlying coordination issue. |
 | `Success` | ❌ Refused | Transaction already processed. Reprocess re-runs the inbound logic and may create duplicate records, fire duplicate webhooks, or otherwise diverge state. Almost never what's wanted. |
 | `Ignore` | ❌ Refused | Explicitly marked as do-not-process. Reprocess reverses that decision. If you really want to reprocess, change the status in NS first. |
