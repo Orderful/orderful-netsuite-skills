@@ -316,9 +316,16 @@ The `<!-- orderful-claude-review -->` marker at the top is required — it ident
     | Only 🟡 MINOR / ⚪ TRIVIAL | `approve`                         |
     | No findings                | `approve`                         |
 
-    A partial/timeout review (see Timeout awareness) MUST write `comment`, never `approve` — an
-    incomplete review must not become a counting approval. If the file is never written, CI
-    treats the verdict as `none` and issues no counting review (fail-safe default).
+    **The verdict reflects findings, not confidence.** If the diff makes claims you cannot
+    verify from this repo (e.g. it describes another codebase's behavior) and you found no
+    findings, that is still `approve` — state the verification limits in the review's Notes
+    section instead of withholding the verdict. "Unverifiable but clean" is not a verdict
+    category, and skipping the write is never correct: any run that posts the review comment
+    (item 2 above) MUST also write this file, choosing from the table above. The only exception
+    is a partial/timeout review (see Timeout awareness), which MUST write `comment`, never
+    `approve` — an incomplete review must not become a counting approval. If the file is never
+    written, CI treats the verdict as `none` and issues no counting review (fail-safe default
+    for crashed runs — not an outcome to choose deliberately).
 
 ## Re-trigger note
 
