@@ -63,6 +63,8 @@ node skills/monitor-mr/monitor-mr.mjs <customer-dir> watch --flow reprocess --af
 
 Completion is detected by the next MR SUMMARY log row; the log line `Beginning to process NetSuite Orderful Transaction internalid: <recordId>` confirms the run picked up your record, and the final OT status (`Success` / `Error` + error text) is the authoritative outcome. `custrecord_ord_tran_retry_count` should have reset to 0. Manual fallback: **Customization > Scripting > Map/Reduce Script Status** in the NS UI.
 
+For **after-the-fact** diagnosis (the reprocess already ran, what did it log?) use [`which-script-ran`](../which-script-ran/SKILL.md): its lifecycle query pulls every log line mentioning the OT id across all three processing-MR deployments in one shot — no marker needed. Note the reprocess task lands on *any free* deployment of the script, so per-deployment UI log checks miss it half the time.
+
 ## Status guard
 
 `orderful_inboundProcessing_MR.queryPendingInboundOrderfulTransactions()` excludes transactions whose status is `Success`, `Ignore`, `PendingCustomProcess`, or `Stale` from its bulk processing pass. The single-transaction reprocess path bypasses that filter — meaning if you call reprocess on a transaction in one of those statuses, the MR will load it and *try* to process it again. That's almost always wrong:

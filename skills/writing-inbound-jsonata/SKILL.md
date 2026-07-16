@@ -335,6 +335,8 @@ A non-exhaustive list, but covers the cases that come up most often. Always run 
 
 Paths are relative to the SuiteApp root: `FileCabinet/SuiteApps/com.orderful.orderfulnetsuite/` inside the `netsuite-connector` repo.
 
+To see whether/where your mapping ran and what it threw at runtime, read the processing MR's execution logs over SuiteQL — markers `starting mapJsonata` / `finished mapJsonata` / `mapJsonata error` — via [`which-script-ran`](../which-script-ran/SKILL.md).
+
 ## Worked end-to-end example
 
 User request: "Pull the administrative contact's phone and email off this 850 into custom fields on the Sales Order, and override the location to ID 17 if the ship-to is the LA warehouse."

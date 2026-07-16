@@ -2,6 +2,8 @@
 
 How a saved NetSuite source record (Invoice, Item Fulfillment, Sales Order, etc.) becomes an outbound EDI transaction posted to Orderful. Useful when a record is stuck in `Pending` and you need to know *what should have fired* and *which gates can suppress it*.
 
+For the full entry-point map across **all** scripts (inbound, buttons/WAs, the dedicated 846 MR, per-doc-type routing) see [script-execution-map.md](script-execution-map.md); to read any script's execution logs programmatically (SuiteQL, by transaction id) see [`skills/which-script-ran`](../skills/which-script-ran/SKILL.md).
+
 ## TL;DR
 
 - Standard outbound runs **synchronously inside the User Event** `orderful_netsuiteTrxHandler_UE.afterSubmit`. By the time the source record's save returns, the outbound transaction has been generated and POSTed to Orderful — or an error has been written to the `customrecord_orderful_transaction` row.

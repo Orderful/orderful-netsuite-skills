@@ -66,14 +66,14 @@ Force-pushing dismisses prior PR approvals — ask reviewers to re-approve after
 
 ### Pull Request Expectations
 
-- PRs require at least 1 approval from a CODEOWNERS reviewer (2 for external contributors).
+- PRs require 2 approving reviews, at least one from a CODEOWNERS reviewer, before merging.
 - Keep PRs focused — avoid unrelated changes in the same PR.
 - Respond to review feedback promptly.
 - Squash merging is used by default; write a clear PR title (it becomes the commit message).
 
 ### Automated review
 
-Maintainers can request an automated Claude review by applying the `claude-review` label to your PR. The bot reads the diff, applies the rubric in [`.claude/skills/code-review/SKILL.md`](.claude/skills/code-review/SKILL.md), and posts a review. Re-apply the label after pushing fixes to trigger another pass.
+Maintainers can request an automated Claude review by applying the `claude-review` label to your PR. The bot reads the diff, applies the rubric in [`.claude/skills/code-review/SKILL.md`](.claude/skills/code-review/SKILL.md), and posts a review. When the review finds no CRITICAL or MAJOR issues, `orderful-bot` adds one counting approval — one human code-owner approval is still required to merge. Re-apply the label after pushing fixes to trigger another pass.
 
 ## Branching Model
 

@@ -62,6 +62,8 @@ jobs:
             contents: read
             pull-requests: write
             id-token: write
+        outputs:
+            verdict: ${{ steps.verdict.outputs.verdict }}
 
         steps:
             - name: Remove review label (idempotent re-trigger)
@@ -104,7 +106,7 @@ jobs:
                   echo "Stripped all PR-controlled Claude config paths from pr-head."
 
             - name: Run Claude Code Review
-              uses: anthropics/claude-code-action@558b1d6cab4085c7753fe402c10bef0fbb92ac7a # v1.0.165
+              uses: anthropics/claude-code-action@e90deca47693f9457b72f2b53c17d7c445a87342 # v1.0.171
               env:
                   PR_NUMBER: ${{ github.event.pull_request.number }}
                   REPO: ${{ github.repository }}
@@ -125,7 +127,25 @@ jobs:
                       --fallback-model sonnet
                       --effort medium
                       --add-dir pr-head
-                      --allowedTools "Read,Write,Edit,Glob,Grep,Task,Bash(gh pr view:*),Bash(gh api:*),Bash(jq:*),Bash(gh pr comment:*),Bash(gh pr review:*)"
+                      --allowedTools "Read,Write,Edit,Glob,Grep,Task,Bash(gh pr view:*),Bash(gh api:*),Bash(jq:*),Bash(gh pr comment:*)"
+
+            - name: Extract review verdict
+              id: verdict
+              env:
+                  VERDICT_FILE: ${{ github.workspace }}/.claude-review-verdict
+              run: |
+                  set -euo pipefail
+                  # The skill writes exactly one of approve|comment|request-changes here.
+                  # A missing file or any unexpected content becomes "none", so a broken or
+                  # partial review can never produce a counting approval downstream.
+                  verdict=none
+                  [[ -f $VERDICT_FILE ]] && read -r verdict < "$VERDICT_FILE" || true
+                  case $verdict in
+                      approve | comment | request-changes) ;;
+                      *) verdict=none ;;
+                  esac
+                  echo "extracted verdict: $verdict"
+                  echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
 
             - name: Post failure notice
               if: failure() || cancelled()
@@ -137,3 +157,95 @@ jobs:
               run: |
                   gh pr comment "$PR_NUMBER" --repo "$REPO" --body "<!-- orderful-claude-review-failure -->
                   Automated Claude review did not complete. See [run logs]($RUN_URL). Re-apply the \`claude-review\` label to retry."
+
+    submit-verdict:
+        needs: review
+        if: needs.review.result == 'success'
+        runs-on: ubuntu-latest
+        # No GITHUB_TOKEN grants: this job authenticates as the orderful-bot PAT and never
+        # runs untrusted PR-head code (no checkout), so the PAT stays out of the reviewer
+        # agent's sandbox. orderful-bot is a repo admin, so ORDERFUL_BOT_GITHUB_TOKEN MUST
+        # be a fine-grained PAT limited to this repo with Pull requests: write only; a
+        # classic token on this account would expose admin scope to CI.
+        permissions: {}
+        steps:
+            - name: Issue counting review as orderful-bot
+              env:
+                  GH_TOKEN: ${{ secrets.ORDERFUL_BOT_GITHUB_TOKEN }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  REPO: ${{ github.repository }}
+                  PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+                  VERDICT: ${{ needs.review.outputs.verdict }}
+              run: |
+                  set -euo pipefail
+                  # Fail closed if the secret is mis-bound to another identity. A wrong token
+                  # could otherwise approve as a different privileged account and slip past
+                  # the PR_AUTHOR self-review guard below.
+                  me=$(gh api user --jq '.login')
+                  if [[ $me != orderful-bot ]]; then
+                      echo "::error::GH_TOKEN authenticates as '$me', expected 'orderful-bot'"
+                      exit 1
+                  fi
+                  if [[ $PR_AUTHOR == orderful-bot ]]; then
+                      echo "orderful-bot authored this PR; cannot self-review."
+                      exit 0
+                  fi
+                  # Verdict comes from the review job as a job output, bound to this workflow
+                  # run rather than scraped from a public (forgeable) PR channel.
+                  verdict="${VERDICT:-none}"
+                  echo "verdict (from review job output): $verdict"
+                  # TOCTOU guard: only act if the PR is still open AND still at the SHA the
+                  # verdict was computed for. Plain assignment (not `read < <(...)`) so a gh
+                  # API error aborts under `set -e` instead of degrading to a green skip.
+                  pr_json=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq '{state, head: .head.sha}')
+                  state=$(jq -r '.state' <<<"$pr_json")
+                  live_head=$(jq -r '.head' <<<"$pr_json")
+                  if [[ $state != open || $live_head != "$PR_HEAD_SHA" ]]; then
+                      echo "PR not open at reviewed SHA (state=$state live=$live_head reviewed=$PR_HEAD_SHA); skipping."
+                      exit 0
+                  fi
+                  # commit_id records which commit was reviewed (display only); it does NOT make
+                  # an approval non-counting, since GitHub counts a reviewer's latest review
+                  # regardless. So after approving we re-check the head and self-dismiss if a
+                  # push slipped in between the guard above and the POST. A push after that
+                  # is handled by the ruleset's dismiss_stale_reviews_on_push.
+                  case $verdict in
+                      approve)
+                          rid=$(gh api --method POST "repos/$REPO/pulls/$PR_NUMBER/reviews" \
+                              -f commit_id="$PR_HEAD_SHA" -f event="APPROVE" \
+                              -f body="<!-- orderful-bot-auto-approve -->
+                  Automated review found no 🔴 CRITICAL or 🟠 MAJOR issues; approving as the maintainer bot. A second human (code-owner) approval is still required to merge." \
+                              --jq '.id')
+                          post_head=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq '.head.sha')
+                          if [[ $post_head != "$PR_HEAD_SHA" ]]; then
+                              gh api --method PUT "repos/$REPO/pulls/$PR_NUMBER/reviews/$rid/dismissals" \
+                                  -f message="Head moved to $post_head after review; dismissing approval of unreviewed code." -f event="DISMISS" >/dev/null
+                              echo "::warning::Head moved after approval; dismissed review $rid."
+                          fi
+                          ;;
+                      request-changes)
+                          gh api --method POST "repos/$REPO/pulls/$PR_NUMBER/reviews" \
+                              -f commit_id="$PR_HEAD_SHA" -f event="REQUEST_CHANGES" \
+                              -f body="<!-- orderful-bot-auto-block -->
+                  Automated review found blocking issues — see the Claude review comment. Re-apply the \`claude-review\` label after pushing fixes." >/dev/null
+                          ;;
+                      *)
+                          echo "verdict=$verdict; no counting review issued."
+                          ;;
+                  esac
+                  # For verdicts where we post NOTHING (comment / none), a prior orderful-bot
+                  # APPROVED or CHANGES_REQUESTED would otherwise stay the bot's latest review and
+                  # keep counting or blocking (dismiss_stale only clears approvals, and only on
+                  # push). Dismiss them so the bot holds no standing verdict. approve and
+                  # request-changes post a fresh review that supersedes prior ones via
+                  # latest-review-per-user, so they need no dismissal.
+                  if [[ $verdict != approve && $verdict != request-changes ]]; then
+                      ids=$(gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" --paginate \
+                          --jq '.[] | select(.user.login == "orderful-bot" and (.state == "APPROVED" or .state == "CHANGES_REQUESTED")) | .id')
+                      while IFS= read -r rid; do
+                          [[ -n $rid ]] || continue
+                          gh api --method PUT "repos/$REPO/pulls/$PR_NUMBER/reviews/$rid/dismissals" \
+                              -f message="Superseded by re-review (verdict: $verdict)." -f event="DISMISS" >/dev/null
+                      done <<<"$ids"
+                  fi
