@@ -62,37 +62,39 @@ git diff main...HEAD --name-only -- . ':(exclude)package-lock.json' > /tmp/pr-fi
 
 PR mode:
 
-PR-mode diff materialization pins to the labeled commit (`$PR_HEAD_SHA`) rather than live HEAD, so a `synchronize` event mid-run can't desync the review. The CI workflow exports `$PR_HEAD_SHA` and `$BASE_SHA`. The GitHub Compare API caps responses at 300 files and silently truncates beyond that, so the script fails-closed when the cap is reached.
+PR-mode diff materialization pins to the labeled commit (`$PR_HEAD_SHA`) rather than live HEAD, so a `synchronize` event mid-run can't desync the review. The CI workflow exports `$PR_HEAD_SHA` and `$BASE_SHA`. The GitHub Compare API caps responses at 300 files and silently truncates beyond that, so fail closed when the cap is reached.
+
+> **CI Bash allowlist — read before running anything.** In CI, only Bash commands whose text
+> *starts with* `gh pr view`, `gh api`, `jq`, or `gh pr comment` are permitted. Variable
+> assignments (`X=$(gh api ...)`), `for`/`while`/`if` constructs, `sleep`, `echo`, and any
+> other leading token are denied at the permission layer — do not attempt them, and do not
+> retry a denied form. Run plain commands, redirect output to files under `/tmp`, read results
+> back with `jq` or the Read tool, and do control flow yourself between tool calls. If a
+> `gh api` call fails transiently (5xx), re-run the same command up to 3 times. If denials or
+> failures leave you unable to materialize the diff at all, post a review comment saying the
+> review could not run (keep the `<!-- orderful-claude-review -->` marker) and write `comment`
+> to the verdict file — never end the session silently.
 
 ```bash
-# Retry transient 5xx with linear backoff; fail closed after 3 attempts.
-for attempt in 1 2 3; do
-  if COMPARE_JSON=$(gh api "repos/$REPO/compare/$BASE_SHA...$PR_HEAD_SHA"); then
-    break
-  fi
-  if [ "$attempt" -lt 3 ]; then
-    sleep $((attempt * 5))
-  else
-    echo "::error::gh api compare failed after 3 attempts."
-    exit 1
-  fi
-done
+gh api "repos/$REPO/compare/$BASE_SHA...$PR_HEAD_SHA" > /tmp/compare.json
 
-TOTAL_FILES=$(jq '.files | length' <<<"$COMPARE_JSON")
+# Fail closed on Compare-API truncation (300-file cap):
+jq '.files | length' /tmp/compare.json
+```
 
-if [ "$TOTAL_FILES" -ge 300 ]; then
-  # Tell the PR author why review was skipped, then bail.
-  gh pr comment "$PR_NUMBER" --repo "$REPO" --body "<!-- orderful-claude-review -->
-Automated review skipped: PR touches $TOTAL_FILES files; GitHub's Compare API truncates at 300 and we refuse to produce a partial review. Split the PR or run the review locally."
-  echo "::error::PR touches $TOTAL_FILES files; Compare API truncates at 300. Refusing to produce a partial review."
-  exit 1
-fi
+If the reported count is ≥ 300, tell the PR author why review was skipped, then stop (write no verdict — CI fails safe):
 
-jq -r '.files[] | select(.filename != "package-lock.json") | .filename' \
-  <<<"$COMPARE_JSON" > /tmp/pr-files.txt
+```bash
+gh pr comment "$PR_NUMBER" --repo "$REPO" --body "<!-- orderful-claude-review -->
+Automated review skipped: PR touches ≥300 files; GitHub's Compare API truncates at 300 and we refuse to produce a partial review. Split the PR or run the review locally."
+```
 
-jq -r '.files[] | select(.filename != "package-lock.json") | "diff --git a/\(.filename) b/\(.filename)\n\(.patch // "")"' \
-  <<<"$COMPARE_JSON" > /tmp/pr-diff.txt
+Otherwise materialize the file list and diff:
+
+```bash
+jq -r '.files[] | select(.filename != "package-lock.json") | .filename' /tmp/compare.json > /tmp/pr-files.txt
+
+jq -r '.files[] | select(.filename != "package-lock.json") | "diff --git a/\(.filename) b/\(.filename)\n\(.patch // "")"' /tmp/compare.json > /tmp/pr-diff.txt
 ```
 
 ## PR-mode path mapping
@@ -286,15 +288,14 @@ The `<!-- orderful-claude-review -->` marker at the top is required — it ident
 
 **PR mode with `--comment`:**
 
-1. Verify the PR is still OPEN **and** still points at the SHA this run reviewed. With `cancel-in-progress: false`, a second label apply queues; without this guard the earlier run would post a review for an outdated commit.
+1. Verify the PR is still OPEN **and** still points at the SHA this run reviewed. With `cancel-in-progress: false`, a second label apply queues; without this guard the earlier run would post a review for an outdated commit. (Allowlist note from Step 2 applies: plain commands only, no assignments or `[ ... ]` tests.)
 
     ```bash
-    PR_VIEW=$(gh pr view "$PR_NUMBER" --json state,headRefOid)
-    PR_STATE=$(jq -r .state <<<"$PR_VIEW")
-    LIVE_HEAD=$(jq -r .headRefOid <<<"$PR_VIEW")
-    [ "$PR_STATE" = "OPEN" ] || { echo "PR is $PR_STATE — skipping submission"; exit 0; }
-    [ "$LIVE_HEAD" = "$PR_HEAD_SHA" ] || { echo "PR head moved from $PR_HEAD_SHA to $LIVE_HEAD — skipping stale review"; exit 0; }
+    gh pr view "$PR_NUMBER" --json state,headRefOid > /tmp/pr-state.json
+    jq -r '.state + " " + .headRefOid' /tmp/pr-state.json
     ```
+
+    Compare the output yourself: if the state is not `OPEN`, or the head no longer equals `$PR_HEAD_SHA`, stop without posting anything — a fresh label apply re-reviews the new head.
 
 2. Post the review body as a PR comment:
 
