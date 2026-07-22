@@ -6,9 +6,10 @@ For the full entry-point map across **all** scripts (inbound, buttons/WAs, the d
 
 ## TL;DR
 
-- Standard outbound runs **synchronously inside the User Event** `orderful_netsuiteTrxHandler_UE.afterSubmit`. By the time the source record's save returns, the outbound transaction has been generated and POSTed to Orderful — or an error has been written to the `customrecord_orderful_transaction` row.
-- The MapReduce `orderful_outboundTransactionHandling_MR.ts` is **a scheduled backstop only**, picking up records the UE didn't process (within `outboundBackProcessingWindowInDays`). The happy path never touches it.
-- As of SuiteApp **v1.22.0** (NS-1037), the sole dispatch gate is the **handling preference** for the document type — a Pattern D setting resolved customer → parent customer → subsidiary default → hardcoded read-site default. With no effective handling preference, the UE creates the `customrecord_orderful_transaction` row + link but never writes the message — record stuck in `Pending`, length 0, no Orderful id, no error.
+- Standard outbound runs **synchronously inside the User Event** `orderful_netsuiteTrxHandler_UE.afterSubmit`. By the time the source record's save returns, the outbound transaction has been generated and POSTed to Orderful (row status **Pending** + the Orderful tx id) — or an error has been written to the `customrecord_orderful_transaction` row.
+- **A successful POST does not mean status Success.** The POST leaves the row at `Pending` with `custrecord_ord_tran_orderful_id` populated; the **status-update MR** (`customscript_orderful_outbound_status_mr` — 15-minute schedule, also task-chained after every successful send) later polls Orderful's `validationStatus` and flips Pending → `Success` / `Error` ("Review transaction in Orderful"). A Pending row *with* an Orderful id is healthy and waiting on that MR, not stuck.
+- The dispatch host **forks on the resolved consolidation method** (ETT value → per-doctype subsidiary default). None/unset → the UE generates + sends inline, and the MapReduce `orderful_outboundTransactionHandling_MR.ts` (`customscript_orderful_outbound_cons`) is **a scheduled backstop only**, picking up records the UE didn't process (within `outboundBackProcessingWindowInDays`). A **real consolidation method** → generation is *deferred to that MR by design* — there, MR involvement is the happy path, not a failure signal.
+- As of SuiteApp **v1.22.0** (NS-1037), the readiness gate is the **handling preference** for the document type — a Pattern D setting resolved customer → parent customer → subsidiary default → hardcoded read-site default. With no effective handling preference, the UE creates the `customrecord_orderful_transaction` row + link but never writes the message — record stuck in `Pending`, length 0, no Orderful id, no error. Two suppressors run before it: `custbody_orderful_do_not_process` on the source record (NS-1055), and the cheap ETT gate (NS-988) that skips records whose entity has no outbound ETT for the doc type (UE log title `processOutboundTransaction: gated`).
 - The old ECT field `custrecord_edi_enab_trans_auto_send_asn` ("auto-send") still **exists and is visible** in NetSuite, but as of v1.22.0 it **no longer gates outbound dispatch**. (Legacy note for accounts still on SuiteApp **< v1.22.0**: there, `auto_send_asn = T` *was* the gate.) Do not confuse this with `custbody_orderful_force_autosend`, a separate and still-valid field on the source record that drives the Generate-&-Send workflow-action manual-send mechanism.
 
 ## The dispatch path on transaction submit
@@ -17,9 +18,11 @@ When a source record is saved with the relevant `custbody_orderful_ready_to_proc
 
 ```
 afterSubmit (orderful_netsuiteTrxHandler_UE.ts)
-  ↓
+  ↓ (suppressors: custbody_orderful_do_not_process skips the record entirely;
+     the NS-988 cheap ETT gate exits with log title `processOutboundTransaction: gated`)
 processOutboundTransaction (TransactionHandling/common/outbound.utilities.ts)
-  ↓
+  ↓ (fork: a resolved consolidation method defers everything below to the consolidation MR;
+     None/unset continues inline)
 linkRecordToOutboundTransaction
   → creates customrecord_orderful_transaction (status = Pending)
   → creates customrecord_orderful_edi_trx_join (link to source NS record)
@@ -32,10 +35,13 @@ generateAndDispatchOutboundTransaction
   → switches on documentType to call generateOutbound810 / generateAndSaveASN / etc.
   → builds the EDI message (applying any JSONata override configured on the ECT)
   → POSTs to Orderful
-  → updates the customrecord_orderful_transaction row with status (Success/Error) and the Orderful tx id
+  → updates the customrecord_orderful_transaction row: status Pending + the Orderful tx id
+    (Error + a response-body slice on a failed POST or inline validation errors)
+  → task-chains the status-update MR, which later flips Pending → Success/Error
+    from Orderful's validationStatus
 ```
 
-All of this happens before the source record's save returns. End-to-end latency from `record save → Orderful tx visible` is a few seconds, not a scheduled-MR cycle.
+All of this happens before the source record's save returns. End-to-end latency from `record save → Orderful tx visible` is a few seconds, not a scheduled-MR cycle — but the NS row's Success/Error verdict follows on the status-update MR's cadence (≤ ~15 minutes).
 
 The trigger flags on the source record:
 
@@ -47,11 +53,13 @@ The trigger flags on the source record:
 
 Some of these get auto-set by UE logic on customer-configured triggers (e.g., when `custentity_orderful_inv_handling_prefs` = `_ORDERFUL_ON_INVOICE_CREATION` on the customer record, Invoice creation auto-sets the `_inv` flag). Others require workflow logic or manual toggling via REST PATCH or the UI.
 
-## The MR is a backstop, not the primary path
+## The MR: backstop for non-consolidated ETTs, primary path for consolidated ones
 
-`orderful_outboundTransactionHandling_MR.ts` runs on a schedule. Its `getInputData` first checks for a `transactionIds` script parameter (used by manual batch-reprocess tooling); if absent, it queries `transaction` for records where any `custbody_orderful_ready_to_process_*` flag is `T` and `createddate >= SYSDATE - outboundBackProcessingWindowInDays` (default 30 days). It then runs the same `processOutboundTransaction` logic the UE does.
+`orderful_outboundTransactionHandling_MR.ts` (`customscript_orderful_outbound_cons`) runs on a schedule. Its `getInputData` first checks for a `transactionIds` script parameter (used by manual batch-reprocess tooling); if absent, it queries `transaction` for records where any `custbody_orderful_ready_to_process_*` flag is `T` and `createddate >= SYSDATE - outboundBackProcessingWindowInDays` (default 30 days). It then runs the same `processOutboundTransaction` logic the UE does.
 
-Practical implication: **the MR only catches records the UE didn't process at submit time** — typically because the UE errored, didn't fire (missing UE deployment), or the customer wasn't fully configured at the time of submit and someone later finished the setup. For a correctly-configured active customer, every save of a ready-to-process source record dispatches in the UE and you should see `Pending → Success/Error` within seconds.
+**For ETTs with no consolidation method**, the practical implication is: **the MR only catches records the UE didn't process at submit time** — typically because the UE errored, didn't fire (missing UE deployment), or the customer wasn't fully configured at the time of submit and someone later finished the setup. For a correctly-configured active customer, every save of a ready-to-process source record dispatches in the UE and you should see the row gain an Orderful id within seconds (then Success/Error after the next status-MR cycle).
+
+**For ETTs with a real consolidation method** (resolved from the ETT or the per-doctype subsidiary default — see [settings-architecture.md](settings-architecture.md)), deferral to this MR is by design: map links records into envelopes, reduce checks readiness off the linked 850's Sales Orders per doc type (`checkOutboundReadiness`: 810 = all SOs Billed; 856 = all PendingBilling/Billed; 855 = none PendingApproval; Cancelled/Closed SOs are terminal and don't block) and then generates + sends; summarize hands leftover flag-clearing to the RunControl MR. Seeing the consolidation MR generate these transactions is normal — don't hunt for a UE failure. Full script routing: [script-execution-map.md](script-execution-map.md) §3.
 
 **Diagnostic mistake to avoid:** seeing a record stuck in `Pending` and concluding "the MR hasn't run yet." That's almost always wrong. If the source record was saved more than a few seconds ago and the `customrecord_orderful_transaction` is still `Pending` with no Orderful id and no error, the UE saved a Pending shell but didn't dispatch. The next section covers why.
 
@@ -79,7 +87,7 @@ Resolution is Pattern D: the customer field `!== undefined` stops the chain (so 
 
 `isProcessAsCustom` still routes around native generation: if the ECT's process-as-custom is effective (`custrecord_edi_enab_trans_cust_process` legacy boolean / `custrecord_edi_enab_custproc_override` override / per-doctype subsidiary default), records route through customer-built SuiteScript via the `PendingCustomProcess` status instead of native generation + dispatch.
 
-`STATUS_RELIANT_DOCUMENT_TYPES` (currently only 880) takes the alternate `checkOutboundReadiness` path with parent-SO status logic, so 880 may behave differently if the underlying SOs aren't in the expected status. Every other type uses the simple gate above.
+`STATUS_RELIANT_DOCUMENT_TYPES` (currently only 880) takes the alternate `checkOutboundReadiness` path with parent-SO status logic, so 880 may behave differently if the underlying SOs aren't in the expected status. Every other type uses the simple gate above — **on the inline UE path**. On the consolidation-MR path, `checkOutboundReadiness`'s per-doc-type SO-status readiness applies to every consolidated type (see the consolidation section above), not just 880.
 
 ## Diagnostic table — record stuck in Pending
 

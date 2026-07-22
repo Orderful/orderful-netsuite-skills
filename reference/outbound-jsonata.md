@@ -448,5 +448,5 @@ A new `customrecord_orderful_transaction` row appears within seconds.
 ## Where to learn more
 
 - The SuiteApp's outbound JSONata engine code (in the `netsuite-connector` repo) at `TransactionHandling/mapping/outboundJsonata.engine.ts` defines the input/context types and registers the SuiteQL functions. If you have access, this is the source of truth for what variables exist.
-- The `mapOutboundJsonataLegacy` function (same repo, `TransactionHandling/common/mapOutboundJsonataLegacy.ts`) is the entry point that wires `$defaultValues` and runs evaluation for the doc types listed in the "Bound `$` variables" table above.
+- The `mapOutboundJsonataLegacy` function (same repo, `TransactionHandling/common/mapOutboundJsonataLegacy.ts`) is the entry point that wires `$defaultValues` and runs evaluation for the doc types listed in the "Bound `$` variables" table above — **except 846**: the Inventory Advice MR (`orderful_outboundInventoryAdvice_MR.ts`) invokes the JSONata engine directly inside its own run (own input/context gathering, never touches `mapOutboundJsonataLegacy`). An 846 mapping bug is diagnosed in that MR's log — see [script-execution-map.md](script-execution-map.md).
 - The `customlist_orderful_jsonata_version` SDF object defines the V1/V2 selector. New work should always use V2.
