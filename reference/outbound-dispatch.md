@@ -2,6 +2,8 @@
 
 How a saved NetSuite source record (Invoice, Item Fulfillment, Sales Order, etc.) becomes an outbound EDI transaction posted to Orderful. Useful when a record is stuck in `Pending` and you need to know *what should have fired* and *which gates can suppress it*.
 
+For the full entry-point map across **all** scripts (inbound, buttons/WAs, the dedicated 846 MR, per-doc-type routing) see [script-execution-map.md](script-execution-map.md); to read any script's execution logs programmatically (SuiteQL, by transaction id) see [`skills/which-script-ran`](../skills/which-script-ran/SKILL.md).
+
 ## TL;DR
 
 - Standard outbound runs **synchronously inside the User Event** `orderful_netsuiteTrxHandler_UE.afterSubmit`. By the time the source record's save returns, the outbound transaction has been generated and POSTed to Orderful — or an error has been written to the `customrecord_orderful_transaction` row.
@@ -117,6 +119,12 @@ ORDER BY id;
 ```
 
 > **Legacy (< v1.22.0):** there, the per-ECT `custrecord_edi_enab_trans_auto_send_asn` was the auto-send gate and should be `T` on each outbound ECT expected to dispatch. As of v1.22.0 that field is no longer the gate (see the dispatch-gate section above).
+
+## Two diagnostic traps: post-rule payloads and the too-large placeholder
+
+**Structurally-wrong received payload + correct NS-stored message → suspect Orderful-side rules, not the JSONata.** If the payload Orderful *received* looks structurally wrong (values inverted, spurious empty/qualifier-only segments) but the NS-stored `custrecord_ord_tran_message` is correct, the defect is almost certainly the per-relationship rule engine mutating the message *after* the SuiteApp sent it — not the connector or the ECT JSONata. Do NOT start editing ECT JSONata. Route to [`audit-outbound-rules`](../skills/audit-outbound-rules/SKILL.md) and run its [connector-vs-rules attribution diff](../skills/audit-outbound-rules/SKILL.md#attribute-the-defect-connector-vs-rules): the NS-stored message *is* the connector's true output, so if it's correct the mutation happened downstream. Editing JSONata in this case has zero effect because the rules post-process regardless (a tell-tale sign is a payload that stays content-identical across multiple saved JSONata versions).
+
+**"Payload is too large to log" is not a truncated send.** Large outbound messages store the literal placeholder string `Payload is too large to log` in `custrecord_ord_tran_message` instead of the body — a guard triggered when the message exceeds `MAX_TRANSACTION_MESSAGE_LENGTH` (100 KB). The **full body is still POSTed to Orderful**; only the NS-stored copy is elided. Don't mistake the placeholder for a truncated or failed send. (The `o2c_large_856` e2e test asserts this placeholder is the expected stored value for an oversized message.) When you hit the placeholder and need the actual bytes for a diff, pull the received payload from Orderful (`GET /v3/transactions/{id}`) rather than the NS-stored field.
 
 ## Test vs. live stream — the sandbox guard and the override that actually controls it
 
