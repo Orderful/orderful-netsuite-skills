@@ -2,7 +2,9 @@
 
 Reference doc for the custom records the Orderful SuiteApp creates and uses. Skills cite this so Claude has accurate field names + relationships when querying. Pulled from the connector's SDF object definitions.
 
-> **When you query these records via SuiteQL**: the table name in SuiteQL is the same as the record's `scriptid` (e.g. `customrecord_orderful_item_lookup`). MULTISELECT fields are exposed via auto-generated mapping tables prefixed `map_` (e.g. `map_customrecord_orderful_item_lookup_custrecord_orderful_item_customer`).
+> **When you query these records via SuiteQL**: the table name in SuiteQL is the same as the record's `scriptid` (e.g. `customrecord_orderful_item_lookup`). MULTISELECT fields (and other relationship-backed fields) are exposed via auto-generated mapping tables prefixed `map_` (e.g. `map_customrecord_orderful_item_lookup_custrecord_orderful_item_customer`), where `mapone` = this record's id and `maptwo` = the referenced record's id.
+>
+> **Gotcha — don't filter a multiselect/relationship field directly.** `WHERE custrecord_orderful_item_customer = '123'` runs without error but silently returns **0 rows** — the column isn't a scalar. A plain `SELECT` of it returns the referenced id (e.g. `392`), but string functions on it return the literal text `RELATIONSHIP FIELD` (and `LENGTH()` = 18) — that's the tell you're looking at one of these. Filter through the `map_` table instead: `JOIN map_<record>_<field> m ON m.mapone = <record>.id WHERE m.maptwo = :referenced_id`.
 
 ## `customrecord_orderful_item_lookup` — Item Lookup
 
@@ -38,7 +40,7 @@ ORDER BY
 
 (Approximate — the connector uses a Kysely query builder, not raw SQL.)
 
-If no match: `ITEM_LOOKUP_MISSING`. The transaction lands in `customrecord_orderful_transaction` with status = `Failed` and an error row in `customrecord_orderful_transaction_error`.
+If no match: `ITEM_LOOKUP_MISSING`. The transaction lands in `customrecord_orderful_transaction` with status = `Error` and an error row in `customrecord_orderful_transaction_error`.
 
 ### Common gotchas
 
@@ -56,14 +58,14 @@ The connector's record of every transaction (per direction) it touches. This is 
 | `custrecord_ord_tran_orderful_id` | TEXT | Orderful Transaction ID | The Orderful-side UUID. Used to cross-reference with Orderful's API / UI. |
 | `custrecord_ord_tran_document` | SELECT | Document Type | E.g. 850, 855, 856. |
 | `custrecord_ord_tran_direction` | SELECT | Direction | `Inbound` (value `1`) or `Outbound` (value `2`). |
-| `custrecord_ord_tran_status` | SELECT | Status | E.g. `Pending`, `Processing`, `Completed`, `Failed`, `Pending - Custom Process`, `Ready To Send`. Backed by `customlist_orderful_transaction_status` — see "Custom Process status values" below. |
+| `custrecord_ord_tran_status` | SELECT | Status | `Pending`, `Success`, `Error`, `Ignore / Do Not Process`, `Ready To Send`, `Pending - Custom Process`, `Stale - Max Retries Exceeded`, `Pending Other Documents from PO`. Backed by `customlist_orderful_transaction_status` — **join by `scriptid`, never hardcode internal ids** (they vary per account); the full scriptid table lives in [mapreduce-monitoring.md](mapreduce-monitoring.md) Layer 3. See "Custom Process status values" below. |
 | `custrecord_ord_tran_entity` | SELECT | Entity | The customer (or vendor) on the NS side. |
 | `custrecord_ord_tran_isa_sender` | TEXT | Sender ID (ISA) | Trading partner ISA sender. |
 | `custrecord_ord_tran_receiver` | TEXT | Receiver ID (ISA) | Trading partner ISA receiver. |
 | `custrecord_ord_tran_orderful_date` | DATETIMETZ | Created Date Orderful | When Orderful received the transaction. |
 | `custrecord_ord_tran_link` | URL | View in Orderful | Direct link to the Orderful UI for this transaction. |
 | `custrecord_ord_tran_message` | LONGTEXT | Message | Stringified JSON. Inbound: the EDI payload the SuiteApp received and converted to JSON — read this in custom inbound scripts. Outbound: the payload your custom script writes for the SuiteApp's outbound MR to POST to Orderful. |
-| `custrecord_ord_tran_error` | TEXTAREA | Error | Surface-level error message if `status = 'Failed'` or `Error`. Custom scripts must populate this on failure. |
+| `custrecord_ord_tran_error` | TEXTAREA | Error | Surface-level error message if `status = 'Error'`. Custom scripts must populate this on failure. |
 | `custrecord_ord_tran_inbound_transaction` | SELECT | Inbound Purchase Order | For outbound docs (e.g. 855), points at the original 850. |
 | `custrecord_ord_tran_testmode` | CHECKBOX | Test Mode | True if this came in via the test ISA. |
 | `custrecord_ord_tran_poller_id` | TEXT | Poller Bucket ID | Which Orderful polling bucket this came in on. |
@@ -75,8 +77,8 @@ When using the SuiteApp's "Process as Custom" flow (see `custom-process-transact
 | Script ID | Meaning | Set by |
 |---|---|---|
 | `transaction_status_pending_cust_process` | Inbound transaction has landed but the SuiteApp won't auto-process it because the customer's enabled-transaction record has `Process as Custom` checked. Your custom MR picks these up. | SuiteApp (on inbound) |
-| `transaction_status_ready_to_send` | Outbound transaction is ready for the SuiteApp's `customscript_orderful_outbound_sending` MR to POST to Orderful. | Your custom outbound script |
-| `transaction_status_success` | Terminal — processing succeeded. | Your custom script (after writing NS records) or the SuiteApp (after a successful POST) |
+| `transaction_status_ready_to_send` | Outbound transaction is ready for the SuiteApp's `customscript_orderful_outbound_sending` MR to POST to Orderful. **That MR is never triggered internally by the SuiteApp** — the account must schedule its deployment (or run it manually); see [script-execution-map.md](script-execution-map.md) §2. On the native (non-custom) path, this status is also the generation re-entrancy lock — a native row stuck here means generation crashed mid-flight. | Your custom outbound script |
+| `transaction_status_success` | Terminal — processing succeeded. | Your custom script (after writing NS records); the SuiteApp inbound (after creating the NS record); the SuiteApp outbound via the **status-update MR** after Orderful validates — a successful POST alone leaves the row at `Pending` + Orderful id |
 | `transaction_status_error` | Terminal — processing failed. Error message goes in `custrecord_ord_tran_error`. | Your custom script or the SuiteApp |
 
 **Status-ID resolver** (drop into your lib file — every custom-process script needs this):
@@ -130,29 +132,47 @@ The SuiteApp strips null values and empty collections before sending. ISA sender
 ### Common queries
 
 ```sql
--- Find recent failed inbound 850s for a customer
+-- Find recent errored inbound 850s for a customer
 SELECT id, custrecord_ord_tran_orderful_id, custrecord_ord_tran_error, custrecord_ord_tran_orderful_date
 FROM   customrecord_orderful_transaction
-WHERE  custrecord_ord_tran_direction = 'Inbound'
+WHERE  custrecord_ord_tran_direction = '1'   -- 1 = Inbound, 2 = Outbound
   AND  custrecord_ord_tran_document   = '<850-list-id>'
-  AND  custrecord_ord_tran_status     = '<Failed-list-id>'
+  AND  custrecord_ord_tran_status     = (SELECT id FROM customlist_orderful_transaction_status
+                                         WHERE UPPER(scriptid) = 'TRANSACTION_STATUS_ERROR')
   AND  custrecord_ord_tran_entity     = :customer_id
 ORDER BY custrecord_ord_tran_orderful_date DESC;
 ```
 
-(SELECT-field internal IDs can be discovered via `getSelectValue` or by inspecting an example record.)
+(Doc-type SELECT internal IDs can be discovered via `getSelectValue` or by inspecting an example record; statuses should always resolve through `scriptid` as above.)
 
-## `customrecord_orderful_transaction_error` — Per-line Error Detail
+## `customrecord_orderful_transaction_error` — Error Detail
 
-When a transaction fails, this record holds line-level detail. Multiple error rows can exist per transaction.
+When a transaction fails, this record holds the error detail. Multiple error rows can exist per transaction (one per retry/attempt), so the rows read as a failure timeline.
 
-Most relevant fields:
+| Script ID | Type | Notes |
+|---|---|---|
+| `custrecord_orderful_error_transaction` | SELECT | Link back to the parent `customrecord_orderful_transaction` — holds that record's **internal id**, not the Orderful id. |
+| `custrecord_orderful_error_message` | TEXTAREA | The error text. Native-path failures give a clean code/message (e.g. `ITEM_LOOKUP_MISSING`); JSONata / SO-save failures give the raw SuiteScript error JSON (e.g. `USER_ERROR: "Please choose an item to add"`). |
+| `custrecord_orderful_error_type` | SELECT | Error category. |
+| `custrecord_orderful_error_resolved` | CHECKBOX | Whether the error has been marked resolved. |
 
-- A reference back to the parent `customrecord_orderful_transaction`
-- The error code (e.g. `ITEM_LOOKUP_MISSING`)
-- The line / segment context (which `PO1` loop, which qualifier values were tried)
+**Pulling the errors for a specific transaction is a two-step lookup**, because the link field holds the NS record id, not the Orderful transaction id:
 
-(Schema details: see `Objects/customrecord_orderful_transaction_error.xml` in the SuiteApp source for the full field list.)
+```sql
+-- 1. resolve the transaction record's internal id from the Orderful id
+SELECT id FROM customrecord_orderful_transaction
+WHERE custrecord_ord_tran_orderful_id = '<orderful-txn-id>';
+
+-- 2. pull its error rows, newest first
+SELECT custrecord_orderful_error_message, custrecord_orderful_error_type, created
+FROM customrecord_orderful_transaction_error
+WHERE custrecord_orderful_error_transaction = '<record-id-from-step-1>'
+ORDER BY created DESC;
+```
+
+Reading the message history is the fastest way to see a transaction's failure timeline (e.g. `JSONata mapper is required` → repeated `Please choose an item to add` → `Stale - Max Retries Exceeded`).
+
+(For the full field list, see `Objects/customrecord_orderful_transaction_error.xml` in the SuiteApp source.)
 
 ## `customrecord_orderful_diagnostic` — Diagnostic Log
 

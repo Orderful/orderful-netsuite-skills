@@ -78,3 +78,4 @@ Concrete example this skill was built from: an inbound 850 produced a Sales Orde
 - [`item-lookup`](../item-lookup/SKILL.md) — for `ITEM_LOOKUP_MISSING`; cross-check against the diagnostic "found item" step.
 - [`enable-customer`](../enable-customer/SKILL.md) — ship-to / sub-customer / department resolution config that shows up in the BDO `customerConfig`.
 - [`reprocess-transaction`](../reprocess-transaction/SKILL.md) — re-run an inbound transaction after a config fix to regenerate the diagnostic.
+- [`which-script-ran`](../which-script-ran/SKILL.md) — the diagnostic record only exists for **native-path** inbound (JSONata-path OTs never get one) and shows the BDO, not the MR's own errors; for what the processing MR logged/threw, read its execution logs over SuiteQL.
