@@ -73,7 +73,7 @@ For **after-the-fact** diagnosis (the reprocess already ran, what did it log?) u
 |---|---|---|
 | `Error` | ✅ | The main case. Transaction failed; reprocess to retry. |
 | `Stale` | ✅ | `handleReprocess` explicitly resets Stale → Pending. This is a documented use case. |
-| `Pending` | ⚠️ Allowed but redundant | Already queued for the next MR pass. Reprocess will re-enqueue and reset the retry count — usually harmless but unnecessary. |
+| `Pending` | ⚠️ Allowed but counterproductive | The reprocess save bumps the record's last-modified time, and the inbound MR's bulk pass only picks up records older than its freshness window (~10 min observed) — so every reprocess restarts the clock and *delays* processing. Verified live: a Pending record poked repeatedly is never picked up. Leave Pending records alone and wait out the freshness window instead. |
 | `AwaitingSiblings` | ⚠️ Allowed but rarely useful | Transaction is waiting for a related document. Reprocess won't fix the underlying coordination issue. |
 | `Success` | ❌ Refused | Transaction already processed. Reprocess re-runs the inbound logic and may create duplicate records, fire duplicate webhooks, or otherwise diverge state. Almost never what's wanted. |
 | `Ignore` | ❌ Refused | Explicitly marked as do-not-process. Reprocess reverses that decision. If you really want to reprocess, change the status in NS first. |
@@ -107,6 +107,7 @@ Administrator already has all three. Custom roles often have the SuiteScript per
 | Script refuses with `Status is "Success" — refusing to reprocess.` | The transaction already processed successfully | This is the status guard. If you genuinely need to reprocess (e.g., need to regenerate downstream records after a config change), change the status in NS first — but understand you may create duplicates |
 | Script refuses with `Status is "Ignore"` or `"PendingCustomProcess"` | Same — refused for safety | Change the status in NS first if you truly need to reprocess |
 | MR completes but the transaction is back in `Error` status | The underlying processing problem isn't fixed | Reprocess re-runs the same logic. Diagnose the error message on the transaction record (`custrecord_ord_tran_error`) before retrying — reprocess loops won't help |
+| Unexpected system-created Item Fulfillments appear after a queue stall clears | Reprocess tasks queued during the stall executed later, against 850s that had since reached `Success` — the status guard checks at *call* time and can't protect a task already in the queue; each late run recreates downstream records | **Never queue reprocesses while tasks are accepted-but-not-starting** (see the queue-stall entry in [`reference/mapreduce-monitoring.md`](../../reference/mapreduce-monitoring.md) §Operational gotchas). After any stall clears, audit for records with created-by `-System-` and delete/reverse the extras |
 
 ## Behaviour rules
 
