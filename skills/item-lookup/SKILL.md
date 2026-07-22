@@ -187,6 +187,8 @@ If the user confirms, restate the manual steps clearly. If they want to do it vi
 - **Trailing whitespace / hidden chars in the lookup value.** If `UPPER(value) = UPPER(:value)` looks like it should match but doesn't, suspect non-printable characters. Tell the user to inspect the existing record's value field for whitespace.
 - **Wrong subsidiary restriction.** If the customer's transaction is in subsidiary A but the lookup is restricted to subsidiary B, no match. Cross-check `custrecord_orderful_item_subsidiary` against the transaction's subsidiary.
 - **Inactive item.** The proposed `ns_item_id` must be active (`item.isinactive = 'F'`). If it's inactive, the lookup will fire but the downstream sales-order creation will fail. Verify before proposing.
+- **UOM mapping does NOT fire for lookup-resolved items — check line units after the fix lands.** Verified live: with a correct UOM mapping in place (e.g. `CA → Master Case`), 850 lines whose items matched via a lookup record still landed on the SO in the item's *base unit* — quantities and amounts silently wrong, nothing errors. After the user creates the lookup and reprocesses, always verify the resulting SO line `units` against what the PO's UOM implies; if the customer orders in cases/packs, expect to have the user patch line units + quantity + rate until the SuiteApp gap is fixed. Propose the units check as part of the fix, not as an afterthought.
+- **Authoring a UOM mapping record: names don't work.** `custrecord_orderful_uom_target` rejects unit *names* ("Master Case", "CS") — it needs the unit's **internal id**, and the Target UOM Type field must be populated, or the record saves but never matches.
 
 ## Reference material
 

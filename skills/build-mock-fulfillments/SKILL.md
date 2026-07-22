@@ -23,6 +23,8 @@ Do NOT use this skill when:
 - The customer's packing comes from a configured analytics dataset (`custentity_orderful_pkg_data_src` set) rather than carton records — the carton-record steps below don't apply; see [`alternative-packing-source`](../alternative-packing-source/SKILL.md).
 - You only want to edit an existing IF — PATCH it directly instead of transforming a new one.
 
+**Planning a consolidated multi-PO 856?** Check this *before* cert day, not during: the ECT's consolidation method (Ship To / Parent 850) defers generation to a consolidation MapReduce, and in accounts observed so far **nothing triggers it** — every consolidation deployment sits `NOTSCHEDULED` and the poller chain doesn't include it. If the test plan requires one 856 spanning multiple POs, verify a consolidation deployment is actually scheduled in this account; otherwise plan to build the consolidated 856 by hand from the IFs' packing data and POST it via Orderful's `/v3/transactions` API.
+
 ## Prerequisites
 
 - Customer has an outbound 856 ECT (`customrecord_orderful_edi_customer_trans`, document type "856 Ship Notice/Manifest", `custrecord_edi_enab_trans_auto_send_asn = T`). If not, route to [`enable-customer`](../enable-customer/SKILL.md).
@@ -82,7 +84,7 @@ The SuiteApp's 856 generator builds the pack (P) and item (I) hierarchy levels f
 
 1. One `customrecord_orderful_carton` per carton:
    - `custrecord_orderful_carton_fulfillment` → the IF id
-   - `custrecord_orderful_carton_is_pallet` = `false` (carton) / `true` (pallet/tare)
+   - `custrecord_orderful_carton_is_pallet` = `false` (carton) / `true` (pallet/tare). **Check the partner's ASN hierarchy first**: if the guideline is flat Shipment→Order→Pack→Item (BSN05 `0001` — e.g. KeHE via SPS), a pallet carton inserts a Tare HL the partner will reject, and Orderful's validator will NOT catch it (it doesn't check HL shape against BSN05). For flat-ASN partners, never create pallet cartons — and if one exists, **hard-delete it; inactivating is not enough**, the generator still reads inactive cartons.
    - `custrecord_orderful_carton_sequence` = carton number
    - `custrecord_orderful_carton_weight`
    - **Marks driver:** `custrecord_orderful_carton_sscc18` (a valid SSCC-18) → emits `MAN*GM` / `MAN*AA`; `custrecord_orderful_carton_tracking` → emits `MAN*CP`. Set the one the partner guideline allows; clear the other so the generator doesn't emit a second, disallowed `MAN`.
@@ -124,6 +126,7 @@ WHERE custrecord_orderful_consolidation_key = '2-856_ship_notice_manifest-<ifId>
 ORDER BY custrecord_ord_tran_orderful_id DESC
 ```
 
+- **Expect exactly ONE active row.** If two OT rows (and two Orderful transactions) exist for the same IF, the scheduled outbound backstop MR likely dispatched alongside the User Event (the ready-flag stays `T` after dispatch) — observed live as byte-identical duplicate documents at the partner. Verify which copy the partner should keep, and inactivate the superseded OT row (they can't be deleted — transaction join dependency).
 - Status `Error` with `"None of the following item fulfillments have cartons"` → Step 2 didn't produce cartons for this IF (committed before the carton records existed, or the dataset returned none).
 - Status `Error` / `"See Validation Tab for error detail"` → it reached Orderful but failed guideline validation. Pull structured errors with [`fetch-validations`](../fetch-validations/SKILL.md), then fix mapping with [`writing-outbound-jsonata`](../writing-outbound-jsonata/SKILL.md). Run [`audit-outbound-rules`](../audit-outbound-rules/SKILL.md) first.
 
