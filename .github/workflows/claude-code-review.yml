@@ -106,7 +106,7 @@ jobs:
                   echo "Stripped all PR-controlled Claude config paths from pr-head."
 
             - name: Run Claude Code Review
-              uses: anthropics/claude-code-action@e90deca47693f9457b72f2b53c17d7c445a87342 # v1.0.171
+              uses: anthropics/claude-code-action@af0559ee4f514d1ef21826982bed13f7edc3c35e # v1.0.178
               env:
                   PR_NUMBER: ${{ github.event.pull_request.number }}
                   REPO: ${{ github.repository }}
@@ -119,6 +119,11 @@ jobs:
                   github_token: ${{ secrets.GITHUB_TOKEN }}
                   use_sticky_comment: true
                   include_fix_links: false
+                  # Transcript in the run log: reviews are posted publicly anyway, and
+                  # without it a run that ends silently (no comment, no verdict) is
+                  # undiagnosable — observed on PR #77 where the agent burned a short
+                  # session on permission denials and gave up with is_error=false.
+                  show_full_output: true
                   prompt: |
                       Invoke Skill(code-review) with args "--pr ${{ github.event.pull_request.number }} --comment".
                   claude_args: |
