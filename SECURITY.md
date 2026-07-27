@@ -45,3 +45,4 @@ With your permission, we will acknowledge your contribution on our [Security Ack
 - Never commit secrets, API keys, tokens, or credentials — push protection is enforced on this repo.
 - Keep dependencies up to date — Dependabot is configured to open PRs for security updates.
 - Sign your commits with GPG or SSH keys.
+
