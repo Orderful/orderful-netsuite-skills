@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Copyright (c) 2026 Orderful, Inc.
 // Driver for the Orderful Dataset Lab RESTlet (customscript_orderful_dataset_lab_rl).
 //
 // Customer selection: --customer <slug> or CUSTOMER=<slug>; reads TBA creds from

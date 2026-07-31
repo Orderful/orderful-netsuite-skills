@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Orderful, Inc.
+/* global define */
 /**
  * orderful_datasetLab_RL.js
  *
