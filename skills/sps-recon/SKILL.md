@@ -16,7 +16,7 @@ Extract the customer's existing EDI configuration from SPS Commerce so we can pr
 ## Prerequisites
 
 1. SPS Commerce portal credentials (email + password) from the customer.
-2. The customer's onboarding tracker exists (e.g., `docs/onboarding/<customer>.md` in the Jarvis repo).
+2. The customer's onboarding tracker exists (e.g., `docs/onboarding/<customer>.md` in your onboarding-tracker repo).
 3. Ideally, the Orderful org has been provisioned (we'll use it for cross-referencing).
 
 ## Inputs

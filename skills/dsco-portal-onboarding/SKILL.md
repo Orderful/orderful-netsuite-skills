@@ -152,7 +152,6 @@ These test the full order lifecycle. Each step may have a retailer-specific temp
 
 | Step | Document | Direction |
 |------|----------|-----------|
-| 10 | 856 ASN (single line) | Orderful → DSCO |
 | 11 | Cancellation | Portal action |
 | 12 | 856 ASN (multi-line) | Orderful → DSCO |
 | 13 | 810 Invoice | Orderful → DSCO |

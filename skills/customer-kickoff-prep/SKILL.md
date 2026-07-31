@@ -17,7 +17,7 @@ Trigger as soon as an AM mentions they're prepping for a kickoff with a new cust
 
 Required from the user (ask via AskUserQuestion if missing):
 
-- **Customer name** — e.g., "Framar"
+- **Customer name** — e.g., "Acme Foods"
 - **AE handoff doc** — Google Doc link OR the customer's Salesforce opportunity ID. The handoff doc is the highest-density source; do not skip it.
 
 Optional but useful:

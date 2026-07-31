@@ -173,7 +173,7 @@ Example: Vantage Supply (unclaimed) responding to Acme Medical (claimed):
     "sender": {"isaId": "VANTAGETEST"},
     "receiver": {"isaId": "ORDFLACMEMEDT"},
     "type": {"name": "855_PURCHASE_ORDER_ACKNOWLEDGMENT"},
-    "stream": "TEST",
+    "stream": "test",
     "message": { ... }
 }
 ```

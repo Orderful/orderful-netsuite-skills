@@ -1,6 +1,6 @@
 # Procure-to-Pay (P2P) EDI Reference — Acme Medical × Vantage Supply
 
-Reference for the Procure-to-Pay (P2P) path: the Acme Medical (customer) × Vantage Supply (trading partner) onboarding, the SuiteApp's first production P2P customer. Compiled from live transaction analysis (May 2026). Names are pseudonymized; sample-file values use a synthetic `VSI` vendor prefix in place of the partner's real 3-alpha product-code prefixes.
+Reference for the Procure-to-Pay (P2P) path: the Acme Medical (customer) × Vantage Supply (trading partner) onboarding, the SuiteApp's first production P2P customer. Compiled from live transaction analysis (May 2026). Company names are pseudonymized, individuals are referred to by role or first-name pseudonym, and sample-file values use a synthetic `VSI` vendor prefix in place of the partner's real 3-alpha product-code prefixes.
 
 ## Overview
 
@@ -30,11 +30,11 @@ Non-standard X12 separators:
 - Data format: X12
 - isSendAckEnabled: true (expects 997 functional acknowledgments)
 
-The ! separator is configured on Vantage Supply's EDI account (id 40366). Orderful handles separator translation so Acme Medical can send with standard * separators and Orderful converts to ! on delivery to Vantage Supply. Confirmed by Piers MacDonald (May 2026): should be fine as long as the EDI account is configured with the correct separators. Amelie Roux clarified: ingress accepts any separator, but the configured separator is used to generate the 997, and Vantage Supply's EDI tool may be strict about it.
+The ! separator is configured on Vantage Supply's EDI account (id 40366). Orderful handles separator translation so Acme Medical can send with standard * separators and Orderful converts to ! on delivery to Vantage Supply. Confirmed by Orderful platform engineering (May 2026): should be fine as long as the EDI account is configured with the correct separators. A platform engineer clarified: ingress accepts any separator, but the configured separator is used to generate the 997, and Vantage Supply's EDI tool may be strict about it.
 
 ## Vantage Supply AS2 Connectivity (a prior VAN)
 
-Vantage Supply uses a prior VAN for AS2 connectivity. Details from Travita Dumas (May 13):
+Vantage Supply uses a prior VAN for AS2 connectivity. Details from the partner's EDI contact (May 13):
 
 | Field | Value |
 |---|---|
@@ -42,7 +42,7 @@ Vantage Supply uses a prior VAN for AS2 connectivity. Details from Travita Dumas
 | AS2 Identity | PRIORVAN_AS2_40672 |
 | HTTPS URL | https://us1.prior-van.net/gateway/httpd/as2/inbound |
 | HTTP URL | http://us1.prior-van.net/gateway/httpd/as2/inbound |
-| IPs (firewall) | 52.5.32.55, 52.5.32.186 |
+| IPs (firewall) | `<VAN firewall IPs — from the partner's AS2 spec sheet>` |
 | Ports | 80 (HTTP), 443 (HTTPS) |
 | Receipt Type | MDN |
 | Receipt Signature | SHA256 |
@@ -51,9 +51,9 @@ Vantage Supply uses a prior VAN for AS2 connectivity. Details from Travita Dumas
 | Encryption | ALG_3DES |
 | Certificate | prior-van as2 shared-00000.crt (expires 2027-05-07) |
 
-**Action needed:** Orderful needs to provide AS2 details to Vantage Supply for connectivity testing. Jordan previously told Vantage Supply that AS2 would be the communication protocol. Orderful handles AS2 — need to send Orderful's AS2 endpoint details to Travita.
+**Action needed:** Orderful needs to provide AS2 details to Vantage Supply for connectivity testing. Jordan previously told Vantage Supply that AS2 would be the communication protocol. Orderful handles AS2 — need to send Orderful's AS2 endpoint details to the partner's EDI contact.
 
-## Vantage Supply 845 Test Scenarios (from Travita, May 13)
+## Vantage Supply 845 Test Scenarios (from the partner EDI contact, May 13)
 
 Vantage Supply wants to test 845 with these specific scenarios:
 
@@ -260,24 +260,24 @@ Core 4 custom SuiteScript built and deployed. Validated against Vantage Supply s
 
 **Native PO status resolution:** Native NS PO statuses are computed and not directly writable for EDI ack states. Custom field is the source of truth. (Unchanged.)
 
-## Vantage Supply Testing Process (Travita Dumas, May 13)
+## Vantage Supply Testing Process (per the partner EDI contact, May 13)
 
-Vantage Supply EDI contact: **Travita Dumas** (Vantage Supply EDI team)
+Vantage Supply EDI contact: a named coordinator on the **Vantage Supply EDI team** (get the current contact from the onboarding tracker)
 
 Key points from Vantage Supply:
 - **Sequence:** Core 4 first (850/855/856/810), then 845/846/867 in any order
-- **850 product codes:** Vantage Supply requires their product code format: 3-alpha prefix + dash/space + numeric/alphanumeric (e.g., "VSI 1234"). Travita offered a list of recent products ordered.
+- **850 product codes:** Vantage Supply requires their product code format: 3-alpha prefix + dash/space + numeric/alphanumeric (e.g., "VSI 1234"). The partner EDI contact offered a list of recent products ordered.
 - **Order types to test:** Regular, rush, and direct ship. Test every order type Acme Medical plans to send.
 - **Pass criteria:** Format, syntax, and validity. Contracts & Rebate team validates 845/846/867 separately (2-5 day turnaround).
 - **997s mandatory both directions.** Vantage Supply sends 997 for everything they receive, expects 997 for everything they send.
 - **Inbound specs:** Vantage Supply asked us to share our EDI specs for inbound documents. Flexible with mapping, uses X12 standard.
-- **845 test scenarios:** Travita previously provided expected 845 test scenarios (documented above).
+- **845 test scenarios:** the partner EDI contact previously provided expected 845 test scenarios (documented above).
 - **Sample test files provided** — stored at `~/orderful-onboarding/acme-medical/vantage-supply-samples/`
 - **Testing coordination:** Vantage Supply EDI team owns it. Duration dependent on Acme Medical responsiveness.
 
 ## Vantage Supply Sample File Analysis (May 13, 2026)
 
-Sample files provided by Travita Dumas. All use standard `*` separator (Orderful handles `!` conversion for delivery to Vantage Supply). Stored at `~/orderful-onboarding/acme-medical/vantage-supply-samples/`.
+Sample files provided by the partner's EDI contact. All use standard `*` separator (Orderful handles `!` conversion for delivery to Vantage Supply). Stored at `~/orderful-onboarding/acme-medical/vantage-supply-samples/`.
 
 ### sample855.txt — PO Acknowledgment
 - `BAK*00*AC*25830466*20260511` — Acknowledged with Changes
@@ -296,7 +296,7 @@ Sample files provided by Travita Dumas. All use standard `*` separator (Orderful
 - `LIN*14*VC*VSI 13-5024*CB*1234567` — VC (vendor catalog) + CB (buyer catalog). Vantage Supply sends both.
 - `SN1**1*CA` — 1 case shipped
 - **No LIN*LT (lot number)** in this sample — either item isn't lot-tracked or only included when applicable
-- **No DSCSA/YNQ segments** — need to ask Travita if these appear on applicable items
+- **No DSCSA/YNQ segments** — need to ask the partner EDI contact if these appear on applicable items
 
 ### sample810.txt — Invoice
 - `BIG*20260512*279983*20260508*PO00000000***DI` — type DI (Debit Invoice)
@@ -327,7 +327,7 @@ Sample files provided by Travita Dumas. All use standard `*` separator (Orderful
 - 4 QTY qualifiers per item: 17 (On Hand), 33 (On Order), 63 (Available to Ship), BQ (Backordered)
 - UOM varies: CS (Case), EA (Each), BX (Box)
 - **Negative quantities exist:** `MMM 63500` QTY*17*-1*CS, `TEC TM3050` QTY*17*-1*EA. Parser must handle.
-- No 845-style sample provided (Travita mentioned she previously sent 845 scenarios — need to locate)
+- No 845-style sample provided (the partner EDI contact previously sent 845 scenarios — documented above)
 
 ### Vantage Supply 846 Guide Analysis (22pp, V4010, 6/3/2022)
 
@@ -381,7 +381,7 @@ These responded to an earlier test 850 (TX 900000000, PO6962527028820507) from R
 
 Vantage Supply is unclaimed (no API key). To simulate Vantage Supply responses:
 1. Build the Orderful JSON message with Vantage Supply's test ISA as sender
-2. Wrap in v3 transaction envelope: type, stream TEST, sender isaId VANTAGETEST, receiver isaId ORDFLACMEMEDT, message with the EDI JSON
+2. Wrap in v3 transaction envelope: type, stream `test`, sender isaId VANTAGETEST, receiver isaId ORDFLACMEMEDT, message with the EDI JSON
 3. POST to https://api.orderful.com/v3/transactions using the receiver's (Acme Medical) API key
 4. Orderful routes based on ISA IDs and existing relationships. autoSend delivers to Acme Medical's poller
 
@@ -395,7 +395,7 @@ Schema gotchas discovered during submission:
 
 ## Lessons Learned
 
-1. P2P is not native. The SuiteApp's entire data model assumes O2C (inbound PO then outbound response docs). P2P reverses every flow. This must be identified during pre-sales and scoped as custom work with explicit timeline and cost. Kyle's statement that it should still leverage the basic integration framework is correct about the connector, but the business logic is 100% custom.
+1. P2P is not native. The SuiteApp's entire data model assumes O2C (inbound PO then outbound response docs). P2P reverses every flow. This must be identified during pre-sales and scoped as custom work with explicit timeline and cost. The AE's framing that it should still leverage the basic integration framework is correct about the connector, but the business logic is 100% custom.
 
 2. Kickoff SOP gap. The Customer Kickoff SOP does not have a decision gate for P2P vs O2C. When the flow is P2P, the kickoff should immediately flag: (a) custom script work required, (b) estimated hours per TX type, (c) who is building it (the SI partner, Orderful, customer). The Northwind Apparel-style pre-call prep should include a flow direction check.
 
@@ -407,7 +407,7 @@ Schema gotchas discovered during submission:
 
 6. Empty REF segments cause validation failure. NetSuite's default outbound mapping may send REF segments with qualifier codes but empty values. The v3 API rejects these. Custom outbound 850 scripts must either populate the values or omit the REF entirely.
 
-7. SI category misclassification. Hiba's team classified this as Cat 1 (customer self-implementing) because the SI partner was not specified in the handoff. The kickoff prep skill should flag SI involvement explicitly.
+7. SI category misclassification. The SI-oversight team classified this as Cat 1 (customer self-implementing) because the SI partner was not specified in the handoff. The kickoff prep skill should flag SI involvement explicitly.
 
 8. Drop-ship vs stock is THE design question. For any P2P customer, the first question must be: what % of POs are drop-ship? Acme Medical is 87% drop-ship, which completely changes the 856 inbound implementation. This question should be asked during kickoff, not after scripts are in flight.
 
@@ -433,7 +433,7 @@ Schema gotchas discovered during submission:
 
 19. EDI Carton custom records may not work on Item Receipts. The Orderful SuiteApp's EDI Carton and Shipped Item records hang off Item Fulfillments (designed for O2C outbound). For P2P stock path where the 856 creates an Item Receipt (not an IF), carton data handling needs separate verification. Drop-ship path (creates IF on linked SO) should work normally.
 
-20. Vantage Supply's published 856 guideline is unreliable — map from sample files instead. The 856 guideline (set ID 40442) lumps all HL levels (S/O/P/T/I) into one flat loop with every segment listed regardless of level. Travis Thorson called it "pure garbage." Will Benish mistakenly set it as the default (default = certified). Jon M noted that since Vantage Supply is the sender, Orderful doesn't validate their payload against this guideline anyway — it just misleads anyone writing a mapping. The sample856.txt from Travita (hierarchy 0002, S/T/O/I with clear segment placement) is the authoritative source. This also applies to the 846 where we found guide-vs-sample discrepancies (VP vs UP, SDQ encoding). Always cross-reference guidelines against actual sample data from the trading partner.
+20. Vantage Supply's published 856 guideline is unreliable — map from sample files instead. The 856 guideline (set ID 40442) lumps all HL levels (S/O/P/T/I) into one flat loop with every segment listed regardless of level. Orderful platform engineers called it unusable; it was mistakenly set as the default (default = certified). They also noted that since Vantage Supply is the sender, Orderful doesn't validate their payload against this guideline anyway — it just misleads anyone writing a mapping. The sample856.txt from the partner (hierarchy 0002, S/T/O/I with clear segment placement) is the authoritative source. This also applies to the 846 where we found guide-vs-sample discrepancies (VP vs UP, SDQ encoding). Always cross-reference guidelines against actual sample data from the trading partner.
 
 21. Start with bare-minimum 855 handling. The original design (4-value status mapping, 5 custom fields, automated hold triggers) was over-engineered for a first pass. The recommendation: join the 855 to the correct PO, flag it as received, show status at header level, and stop there. Don't automate mismatch handling or email alerts until there are months of real transaction data to know what actually happens. Jordan agreed immediately. For future P2P customers: propose bare minimum first, let complexity grow from real-world needs.
 

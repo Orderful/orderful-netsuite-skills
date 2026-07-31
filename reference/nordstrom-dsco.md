@@ -38,7 +38,7 @@ Nordstrom runs dropship onboarding and B2B EDI as **separate programs with separ
 ## Pre-activation checklist (Nordstrom's gate — all vendor-side)
 
 1. **Ship codes readiness** — the vendor declares which of the allowed ship methods they support.
-2. **Third-party billing** — vendors ship on **Nordstrom's UPS account 71676E** (from the DS Manual — reconfirm on each onboarding); collect and prepaid are **prohibited**. Beware internal NetSuite ship-method labels that say "Prepaid" — what matters is the third-party billing setup at the carrier.
+2. **Third-party billing** — vendors ship on **Nordstrom's UPS third-party billing account** (`<get the account number from the current DS Manual — reconfirm on each onboarding>`); collect and prepaid are **prohibited**. Beware internal NetSuite ship-method labels that say "Prepaid" — what matters is the third-party billing setup at the carrier.
 3. **RFID-enabled price tickets** per the DS Manual — a merchandising task, not EDI.
 4. **≥2 active Rithum portal contacts** on the account.
 5. Pack slips / return cards: **no longer required** (DS guide revision dated 11/24/2025) — don't let an old checklist stall the vendor.

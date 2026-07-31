@@ -281,7 +281,7 @@ PATCH /v2/document-relationships/<rel_id>
 
 ## Known Platform Issues
 
-1. **856 conditional HL validation gap** — Travis Thorson (Dec 2022): direct AAFES requires Tare/Pack HL conditional validation. Not applicable to DSCO path.
+1. **856 conditional HL validation gap** — internal report (Dec 2022): direct AAFES requires Tare/Pack HL conditional validation. Not applicable to DSCO path.
 2. **Vendor A 846 overdue** — Production monitoring error running 6+ weeks (March–May 2026).
 3. **One vendor's 856 ASN broken** — Org hierarchy interfering with document creation (April–May 2026, unresolved).
 
@@ -304,6 +304,6 @@ NetSuite inventory allocation is **manual** for EDI/dropship workflows. Cannot c
 - **Sandbox testing:** Pre-create large inventory quantities (999 units) so orders proceed without manual allocation.
 - **Production:** Customer's DC team handles allocation through their normal pick/pack/ship workflow.
 
-## Confluence Reference
+## Internal Reference
 
-[AAFES EDI Onboarding Detail](https://orderful.atlassian.net/wiki/spaces/NT/pages/4179623948) — Network Team canonical guide. Read this for the full onboarding process.
+Orderful's Network Team maintains a canonical "AAFES EDI Onboarding Detail" guide on the internal wiki (Confluence, NT space) — Orderful staff should search for it there for the full onboarding process. The operational content relevant to SuiteApp onboardings is captured in this doc and the `dsco-portal-onboarding` / `rithum-dsco-end-to-end` skills.
