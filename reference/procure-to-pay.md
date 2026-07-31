@@ -1,6 +1,6 @@
-# Vantage Supply P2P EDI Reference
+# Procure-to-Pay (P2P) EDI Reference — Acme Medical × Vantage Supply
 
-Reference data for Vantage Supply (Vantage Supply, Inc.) EDI via the Procure-to-Pay (P2P) path. Compiled from live transaction analysis and the Acme Medical onboarding (May 2026).
+Reference for the Procure-to-Pay (P2P) path: the Acme Medical (customer) × Vantage Supply (trading partner) onboarding, the SuiteApp's first production P2P customer. Compiled from live transaction analysis (May 2026). Names are pseudonymized; sample-file values use a synthetic `VSI` vendor prefix in place of the partner's real 3-alpha product-code prefixes.
 
 ## Overview
 
@@ -266,7 +266,7 @@ Vantage Supply EDI contact: **Travita Dumas** (Vantage Supply EDI team)
 
 Key points from Vantage Supply:
 - **Sequence:** Core 4 first (850/855/856/810), then 845/846/867 in any order
-- **850 product codes:** Vantage Supply requires their product code format: 3-alpha prefix + dash/space + numeric/alphanumeric (e.g., "Vantage Supply 1234"). Travita offered a list of recent products ordered.
+- **850 product codes:** Vantage Supply requires their product code format: 3-alpha prefix + dash/space + numeric/alphanumeric (e.g., "VSI 1234"). Travita offered a list of recent products ordered.
 - **Order types to test:** Regular, rush, and direct ship. Test every order type Acme Medical plans to send.
 - **Pass criteria:** Format, syntax, and validity. Contracts & Rebate team validates 845/846/867 separately (2-5 day turnaround).
 - **997s mandatory both directions.** Vantage Supply sends 997 for everything they receive, expects 997 for everything they send.
@@ -291,16 +291,16 @@ Sample files provided by Travita Dumas. All use standard `*` separator (Orderful
 - `TD5**2*AVRT` — carrier Averitt Express
 - `REF*BM*01195619` — Bill of Lading
 - `N1*SF` = SAMPLE DISTRIBUTION CO, SAMPLE CITY, ST 00000
-- `N1*ST` = ACMEHEALTH HEALTHCARE, ID 000032
+- `N1*ST` = ACME MEDICAL, ID 000032
 - `PRF*1234567***20260504` — PO reference
-- `LIN*14*VC*Vantage Supply 13-5024*CB*1234567` — VC (vendor catalog) + CB (buyer catalog). Vantage Supply sends both.
+- `LIN*14*VC*VSI 13-5024*CB*1234567` — VC (vendor catalog) + CB (buyer catalog). Vantage Supply sends both.
 - `SN1**1*CA` — 1 case shipped
 - **No LIN*LT (lot number)** in this sample — either item isn't lot-tracked or only included when applicable
 - **No DSCSA/YNQ segments** — need to ask Travita if these appear on applicable items
 
 ### sample810.txt — Invoice
 - `BIG*20260512*279983*20260508*PO00000000***DI` — type DI (Debit Invoice)
-- `IT1*1*1*BX*32.95****BP*BD366643-1*VN*Vantage Supply 100983` — **Both BP (Buyer's Part) and VN (Vendor Number)**. Confirms Vendor Pricing tab join key works.
+- `IT1*1*1*BX*32.95****BP*BD366643-1*VN*VSI 100983` — **Both BP (Buyer's Part) and VN (Vendor Number)**. Confirms Vendor Pricing tab join key works.
 - `PID*F****SAMPLE-ITEM PLASTIC TUBE 10.0ML` — product description
 - `TDS*3895` — total $38.95
 - `CAD*****UPSN**BM*1Z1H64X97389003981` — UPS tracking
@@ -372,8 +372,8 @@ Submitted using Acme Medical API key with Vantage Supply test ISA in envelope:
 | TX ID | Type | Status | Business Number |
 |---|---|---|---|
 | 900000000 | 855 PO Ack | VALID / SENT / ACCEPTED | PO6962527028820507 |
-| 900000000 | 856 ASN | VALID / SENT / ACCEPTED | SHP-Acme Medical-20260511-001 |
-| 900000000 | 810 Invoice | VALID / SENT / ACCEPTED | INV-Acme Medical-20260511-001 |
+| 900000000 | 856 ASN | VALID / SENT / ACCEPTED | SHP-ACMEMED-20260511-001 |
+| 900000000 | 810 Invoice | VALID / SENT / ACCEPTED | INV-ACMEMED-20260511-001 |
 
 These responded to an earlier test 850 (TX 900000000, PO6962527028820507) from Retail Integration Testing. They are sitting in Acme Medical's test poller bucket 68810.
 
