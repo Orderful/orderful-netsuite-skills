@@ -278,8 +278,24 @@ Once VALID, summarize for the user:
 - **The partner's guideline acts as an allowlist on the X12 output, not just a validator.** A field present in `$defaultValues` but missing from the X12 isn't a bug — the partner's guideline decides what reaches the output via two mechanisms: (a) **explicit deletion** — the path is in the guideline with `use: "notRecommended"` + `notes: "Intentionally left empty"`; (b) **implicit deletion** — the path simply isn't in the guideline at all (the converter strips anything the partner doesn't allowlist). Both render in the Orderful UI as a yellow strike-through indicator next to the value. Fetch the actual rules via `GET /v2/guideline-sets/{id}/guidelines?convertToOrderfulPath=true` — paths match the `dataPath` shape from validation errors. Practical implication: before writing JSONata to *remove* a SuiteApp default the partner rejects, check whether the guideline is already stripping it. Overriding fields the partner doesn't reference is harmless, but writing JSONata to delete fields the guideline already removes is wasted effort. The guideline endpoints accept the public `orderful-api-key` (no UI JWT required).
 - **Outbound runs through four layers — know which one strips your field before you debug.** `(1)` SuiteApp default mapper → `(2)` your ECT JSONata → message stored in NS `custrecord_ord_tran_message` (this is what you POST) → `(3)` Orderful per-relationship rules (`/v2/rules`, applied server-side after send) → `(4)` guideline → X12 conversion (allowlist) → validation. `/v3/transactions/{id}/message` shows the *post-(4)* state. So a field present in `custrecord_ord_tran_message` but absent from `/message` (and reported "mandatory") was stripped at layer 3 OR 4 — and they need different fixes: layer 3 is a [`rule edit`](../audit-outbound-rules/SKILL.md), layer 4 is "emit the qualifier the guideline allowlists." Don't assume it's the rule: confirm by checking the guideline's allowed values for that path (layer 4) before touching `/v2/rules` (layer 3).
 
+## Real-world example: AAFES DSCO 810 deviations (Northwind Apparel, May 2026)
+
+AAFES via DSCO (guideline 146865) is strict on 810 invoices — extra fields cause rejection. The production JSONata (v2) handles these deviations:
+
+| Deviation | JSONata action |
+|-----------|---------------|
+| `referenceInformation` (PO/VN/CO qualifiers) | Drop entirely — not allowed on DSCO 810 |
+| `N1_loop` | Keep ST (Ship-To) only — drop BT/SF/RI party loops |
+| `IT1.basisOfUnitPriceCode` | Remap WE → QT |
+| `SAC_loop` (Service/Allowance/Charge) | Drop entirely — H850 not allowed; AAFES is merchant of record, no freight passthrough |
+
+The pattern here is **subtraction, not addition**: the partner spec is narrower than the SuiteApp's default output. The JSONata removes fields/loops that the default mapper includes but the partner rejects. This is common with strict partners — always compare the default output against the partner's published guideline to identify what needs to be dropped.
+
+**Before writing any JSONata for a strict partner, audit `/v2/rules` first** — see [`audit-outbound-rules`](../audit-outbound-rules/SKILL.md). Rules can silently strip segments and confuse debugging.
+
 ## Reference material
 
 - [`reference/outbound-jsonata.md`](../../reference/outbound-jsonata.md) — full reference: input/context variables, the wrapped-envelope pattern, transform operator semantics, registered SuiteQL functions, common Orderful JSON field names, schema gotchas, and an annotated worked-example expression covering N1 / TD1 / TD5 / REF / LIN.
 - [`reference/record-types.md`](../../reference/record-types.md) — schema for `customrecord_orderful_edi_customer_trans` (where the JSONata field lives), `customrecord_orderful_transaction` (the saved-message field), and related records.
+- [`reference/aafes-dsco.md`](../../reference/aafes-dsco.md) — AAFES DSCO reference: 3 EDI paths, transaction set, 850 structure, 856/810 requirements, compliance/chargebacks.
 - [`which-script-ran`](../which-script-ran/SKILL.md) + [`reference/script-execution-map.md`](../../reference/script-execution-map.md) — prove whether your mapping actually executed, and where: the generating host (UE vs consolidation MR vs the 846 MR) logs audit `Outbound JSONata mapper` ("Overriding <docType> JSON message by JSONata"), and its errors are readable over SuiteQL without the NS UI.
