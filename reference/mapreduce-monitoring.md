@@ -185,18 +185,31 @@ Verify: count OTs with `created >= t0`; optionally confirm the Orderful bucket d
 | Writes | OT → `Success` + NS record + `edi_trx_join` row; or `Error` + `customrecord_orderful_transaction_error` rows + `retry_count`++; `Stale` once retries ≥ `custscript_orderful_inbound_max_retries` (default 3) |
 | Key log titles | `Inbound Processing - map` ("Beginning to process NetSuite Orderful Transaction internalid: {id}, Orderful ID: {oid}" — **your per-OT correlation hook**), `Entity lookup result`, `starting mapJsonata`/`finished mapJsonata`, `reduce: processBdo error`, `Failed to create SALES_ORDER`, `summarize` ("Map Error - key: {OT id}, error: {json}") |
 
-**The ~10-minute freshness gate — weaker than it looks (mechanism corrected July 2026, verified in source + live).** The in-code deployment check compares `deploymentId` to the *script* id — never equal — so the gate nominally applies on every deployment. **But** the OT's `lastmodified` comes back from SuiteQL **date-only** (verified live: `"7/14/2026"`) and parses to *midnight* of the modified day, so "older than 10 minutes" is true any time after 00:10 — in practice the gate only excludes records during roughly **00:00–00:10** account time. Consequences:
+**The ~10-minute freshness gate — near-inert in US accounts, near-total in UTC+ accounts (mechanism verified in source + live, timezone behaviour added August 2026).** Two independent defects compound here, and which one you feel depends entirely on the account's timezone.
 
-- Don't reach for the gate to explain a fresh OT the chained run skipped. If the post-poll chained run shows `mapKeys: {}`, check whether the poll actually created OTs (it chains unconditionally, even on empty polls) and whether they pass the pending-query filters (status, direction, `pending_transactions` null) — those, not the gate, are the usual reasons.
-- The `custscript_orderful_single_inbound` path (reprocess) loads the record directly and bypasses the batch query entirely — still the reliable way to push one specific OT through *now*.
+The in-code deployment check compares `deploymentId` to the *script* id — never equal — so the gate applies on **every** deployment, including `..._mr_ns` and the single-transaction reprocess path it was meant to skip. The `else return true` branch is dead code.
+
+What saves most accounts is the second defect. The OT's `lastmodified` comes back from SuiteQL **date-only** (verified live: `"7/14/2026"`) — every format in `NetsuiteDateFormats` is date-only, so there is never a time component — and parses to *midnight* of the modified day in the **script server's** local time. But SuiteQL renders stored datetimes in the **account** timezone. The gate then compares that against a server-clock `new Date()`. The two clocks are only interchangeable when the account tz and the server tz sit on the same calendar date.
+
+- **Account at/behind server time (most US accounts):** midnight is always comfortably in the past, so "older than 10 minutes" is true any time after 00:10 and the gate excludes records only during roughly **00:00–00:10**. It is effectively inert — which is why this went unnoticed for so long.
+- **Account ahead of server time (UTC+10-ish — AU/NZ/APAC):** the account-tz date rolls over first, so midnight-of-`lastmodified` lands in the **future** and every touched record is dropped *before map*, silently, for up to **~17 hours a day**. Verified live on an Australian sandbox (`7284816_SB1`, AUD root subsidiary): `Inbound Processing - map` had never executed a single key, and the usable window was `SYSDATE` 00:10–07:00 only. In production this is a missed-order incident, not a lab curiosity — inbound EDI stalls most of the day, then flushes in a burst.
+- **It is not customer config.** There is no preference that aligns these two clocks.
+
+Consequences:
+
+- Don't reach for the gate to explain a fresh OT the chained run skipped **in a US account**. If the post-poll chained run shows `mapKeys: {}`, check whether the poll actually created OTs (it chains unconditionally, even on empty polls) and whether they pass the pending-query filters (status, direction, `pending_transactions` null) — those, not the gate, are the usual reasons. In a UTC+ account, invert that instinct: check the gate first, by comparing the MR's logged `dates:` array against `SYSDATE`.
+- **Reprocess does NOT bypass the gate** (corrected — the earlier claim here was wrong). The `custscript_orderful_single_inbound` path bypasses the batch *query*, but the result still runs through the same `.filter()` in `getInputData`. Worse, `handleReprocess` resets `retry_count` and saves *before* queuing the MR, so its own bookkeeping write moves `lastmodified` to now and re-arms the gate against the very record it was asked to push through.
+  - In a US account this is invisible: the date-only truncation drops the fresh timestamp back to midnight, which still reads as "older than 10 minutes."
+  - In a UTC+ account, calling reprocess leaves the OT **less** processable than before. It appears to work only when it happens to have nothing to change (`retry_count` already 0, status already Error) — no field change, no `lastmodified` bump, gate passes on the stale date. That presents as random intermittent success.
+- **Sequencing trap for whoever fixes this:** correcting the date-only parse *alone* would break reprocess for **every** account, US ones included — a freshly-saved record is by definition less than 10 minutes old, so an honest datetime comparison drops it. The deployment check (or the reprocess path's exemption from the gate) has to be fixed in the same change.
 
 ### 3. Reprocess (single or many)
 
 | | |
 |---|---|
-| Trigger | agent-write RESTlet `reprocessTransaction` `{recordId}` ([reprocess-transaction](../skills/reprocess-transaction/SKILL.md)); UI button uses workflow action `customscript_orderful_reprocess_wa` — same handler |
-| What it does | Resets `retry_count` to 0, flips `Stale`→`Pending`, saves, then `task.create` on the processing MR with `custscript_orderful_single_inbound = <id>` |
-| Returns | `{status:'success', recordId}` — **no taskId.** |
+| Trigger | agent-write RESTlet `reprocessTransaction` `{recordId}` + `authorizedBy`/`agentPlanId` ([reprocess-transaction](../skills/reprocess-transaction/SKILL.md)); UI button uses workflow action `customscript_orderful_reprocess_wa` — same handler |
+| What it does | Resets `retry_count` to 0, flips `Stale`→`Pending`, saves, then `task.create` on the processing MR with `custscript_orderful_single_inbound = <id>`. ⚠️ That save bumps `lastmodified` and **re-arms the freshness gate** against this record — harmless in US accounts, self-defeating in UTC+ ones (see above) |
+| Returns | `{status:'success', recordId}` — **no taskId.** `success` means "the task was queued", *not* "the record will be processed" — see the freshness-gate note above before trusting it. |
 | Key log titles | `Reprocess Workflow Action`, `Reprocess Handler` ("Successfully triggered re-processing for id: {id}"), then the processing MR's titles above |
 
 Correlate without a taskId:
