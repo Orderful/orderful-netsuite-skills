@@ -180,6 +180,21 @@ WHERE custrecord_edi_enab_trans_customer = <customer_id>
 
 Re-firing the source record's ready-to-process flag does **not** reuse the existing `customrecord_orderful_transaction` row for that source + doc type — it **creates a new one** (same `custrecord_orderful_consolidation_key`, new internal id). Successive retries therefore accumulate rows. The stale ones cannot be deleted via REST (`This record cannot be deleted because it has dependent records` — the `customrecord_orderful_edi_trx_join` link). **Inactivate** them (`isinactive = true`) instead, leaving the latest successful row active.
 
+## Bounded outbound retries (SuiteApp v1.23.1+, NS-1176)
+
+> **Version-gated — this changes the flag-clearing behavior described above.** On builds **before v1.23.1**, a failed outbound generation/send **cleared** the `custbody_orderful_ready_to_process_*` flag (via MR completion / the RunControl MR), so a transient failure orphaned the record and needed a manual re-fire. **v1.23.1 (NS-1176) reverses that for failures.**
+
+On v1.23.1+:
+
+- A failed outbound generation/send **no longer clears** `custbody_orderful_ready_to_process_*`. Instead it **increments `custrecord_ord_tran_retry_count`** on the outbound `customrecord_orderful_transaction` row (previously an inbound-only field — outbound rows sat at 0).
+- The 15-minute consolidation sweep (`customscript_orderful_outbound_cons`) **retries the SAME row** — resets it Error → Pending and regenerates, rather than minting a new row each cycle. **One counter per document.**
+- Below the cap the flag stays set and the sweep keeps retrying; at the cap the row parks **STALE** and the flag is released. A new company preference **`custscript_orderful_outbound_max_retries` (default 3)** sets the cap (≈45 min worst case). Manual recovery from STALE is the existing "reset Stale → Pending".
+- The sweep's input map previously **excluded `consolidation = None`** doc types entirely (assuming the inline UE owns them); it now **admits None-path records whose flag is still set** (by construction, a failed inline attempt), with a guard so it can't double-send a record whose first inline attempt is still in flight.
+
+**Net effect:** transient outbound failures self-heal without a manual re-fire — most importantly the 856 **"no cartons"** carton-timing race (inline generation fires a beat before the WMS/3PL writes the carton record; the next sweep cycle generates and delivers). Behavioral tell in the logs: a scriptnote `Record <IF> keeps custbody_orderful_ready_to_process_ful set after a failed 856 attempt; the outbound consolidation sweep will retry it`.
+
+> **Retries ride the consolidation sweep, which is NOT scheduled by default.** `customscript_orderful_outbound_cons` must have a SCHEDULED deployment for the retry loop to run; a None-path customer without it gets only the single inline attempt. Verify the deployment is scheduled after relying on this.
+
 ## Source pointers
 
 | File (under `FileCabinet/SuiteApps/com.orderful.orderfulnetsuite/`) | Role |
