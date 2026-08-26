@@ -5,7 +5,7 @@ description: Trigger Orderful's inbound polling MapReduce in a NetSuite customer
 
 # Run Inbound Poller
 
-Triggers `customscript_orderful_inbound_mr` (the inbound polling MapReduce) in a customer's NetSuite by POSTing `{ "action": "triggerInboundPolling" }` to the SuiteApp's `customscript_orderful_agent_write_rl` RESTlet over TBA. The RESTlet is the generic Orderful Agent write surface; this skill exercises only its `triggerInboundPolling` action.
+Triggers `customscript_orderful_inbound_mr` (the inbound polling MapReduce) in a customer's NetSuite by POSTing `{ "action": "triggerInboundPolling" }` to the SuiteApp's `customscript_orderful_agent_write_rl` RESTlet over TBA. The RESTlet is the generic Orderful Agent write surface; this skill exercises only its `triggerInboundPolling` action. Every agent-write request must also carry `authorizedBy` + `agentPlanId` — since v1.22 the RESTlet rejects the request *before* it dispatches on `action` without them. The script fills these from `AGENT_AUTHORIZED_BY` in the customer's `.env`, falling back to `cli:<os-user>`.
 
 The polling MR pulls pending transactions from Orderful's polling bucket(s) into NetSuite. It runs on a 15-minute schedule by default; this skill is for ad-hoc triggers — after configuration changes, when debugging stuck transactions, during demos, or any time a contractor would otherwise open NetSuite to run the script deployment manually.
 

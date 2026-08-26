@@ -5,7 +5,7 @@ description: Reprocess a single inbound Orderful Transaction in a NetSuite custo
 
 # Reprocess Transaction
 
-Triggers `customscript_orderful_transaction_mr` (the inbound MapReduce) for a single Orderful Transaction record by POSTing `{ "action": "reprocessTransaction", "recordId": <id> }` to the SuiteApp's `customscript_orderful_agent_write_rl` RESTlet over TBA.
+Triggers `customscript_orderful_transaction_mr` (the inbound MapReduce) for a single Orderful Transaction record by POSTing `{ "action": "reprocessTransaction", "recordId": <id> }` to the SuiteApp's `customscript_orderful_agent_write_rl` RESTlet over TBA. Every agent-write request must also carry `authorizedBy` + `agentPlanId` — since v1.22 the RESTlet rejects the request *before* it dispatches on `action` without them. The script fills these from `AGENT_AUTHORIZED_BY` in the customer's `.env`, falling back to `cli:<os-user>`.
 
 The handler (`handleReprocess` in the SuiteApp) loads the transaction, resets `custrecord_ord_tran_retry_count` to 0, resets the status from `Stale` to `Pending` if applicable, then dispatches the inbound MR with the single transaction's internal ID. This is the same code path the **Reprocess** button on the transaction record runs.
 

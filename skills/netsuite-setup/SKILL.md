@@ -92,7 +92,7 @@ node <path-to-this-skill>/test-connections.mjs ~/orderful-onboarding/<slug>
 The script reads `ENVIRONMENT` from the `.env` (defaults to sandbox) and picks the matching `NS_SB_*` or `NS_PROD_*` NetSuite credentials. It runs three checks:
 
 1. **NetSuite** — a harmless `SELECT TOP 1` SuiteQL query (validates TBA + REST Web Services + role's basic data access).
-2. **RESTlet** — a probe POST to the SuiteApp's agent-write RESTlet with an unknown action (validates the SuiteApp version is current AND the role has `SuiteScript = Full`). This does *not* validate `SuiteScript Scheduling`; that perm only fails when an action like `triggerInboundPolling` actually calls `task.create()`, which `/run-poller` will surface clearly on first use.
+2. **RESTlet** — a probe POST to the SuiteApp's agent-write RESTlet with an unknown action, carrying `authorizedBy`/`agentPlanId` (validates the SuiteApp version is current AND the role has `SuiteScript = Full`). This does *not* validate `SuiteScript Scheduling`; that perm only fails when an action like `triggerInboundPolling` actually calls `task.create()`, which `/run-poller` will surface clearly on first use.
 3. **Orderful** — a small authenticated GET to `api.orderful.com` (Orderful has one global endpoint, not a separate sandbox URL).
 
 It prints pass/fail per system.
@@ -129,7 +129,7 @@ Common causes, check in this order:
 
 3. **`INSUFFICIENT_PERMISSION` after audience is ruled out** — the role on the token doesn't have `SuiteScript = Full`. Add it on the role's **Setup tab** (and add `SuiteScript Scheduling` while you're there — see `INTEGRATION-RECORD-SETUP.md` "Required role permissions"). No need to regenerate the token after editing the role.
 
-4. **Other failure** — the script prints the raw response. If the RESTlet returned anything other than the expected "Unknown action" rejection, treat it like any other RESTlet failure and check the script execution log (Customization > Scripting > Script Deployments > "Orderful Agent Write" > Execution Log).
+4. **Other failure** — the script prints the raw response. The probe passes on either of the RESTlet's own rejections — "Unknown action", or the `authorizedBy and agentPlanId are required` reply from a build that validates attribution first — since both prove the script executed. If it returned anything else, treat it like any other RESTlet failure and check the script execution log (Customization > Scripting > Script Deployments > "Orderful Agent Write" > Execution Log).
 
 ### If Orderful fails
 

@@ -15,6 +15,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import OAuth from 'oauth-1.0a';
 import crypto from 'node:crypto';
+import { userInfo as osUserInfo } from 'node:os';
 
 const customerDir = process.argv[2];
 if (!customerDir) {
@@ -63,6 +64,29 @@ console.log(`Testing credentials for: ${customerLabel} (ENVIRONMENT=${envMode})\
 let nsPass = false;
 let ofPass = false;
 let rlPass = false;
+
+// ---------- agent-write attribution ----------
+//
+// Since v1.22 the agent-write RESTlet rejects any request missing
+// `authorizedBy` + `agentPlanId`, and it does so BEFORE dispatching on
+// `action` (`rejectMissingAttribution` in orderful_agentWrite_RL.ts). Both
+// values land in the NetSuite audit trail, so they must identify the human who
+// actually ran the command — NetSuite's own audit attributes the call to the
+// integration user, and these fields are what close that gap.
+//
+// `authorizedBy` resolves from AGENT_AUTHORIZED_BY in the customer's .env,
+// falling back to the OS user as `cli:<user>`. The fallback is deliberately
+// not a plausible-looking email: guessing one would attribute your writes to
+// somebody else in a permanent audit record.
+function agentAttribution(planLabel) {
+  const authorizedBy =
+    process.env.AGENT_AUTHORIZED_BY?.trim() || `cli:${osUserInfo().username}`;
+  const customer = process.env.CUSTOMER_SLUG?.trim() || 'unknown-customer';
+  const agentPlanId =
+    process.env.AGENT_PLAN_ID?.trim() ||
+    `${planLabel}-${customer}-${new Date().toISOString().slice(0, 10)}`;
+  return { authorizedBy, agentPlanId };
+}
 
 // ---------- NetSuite ----------
 
@@ -120,6 +144,18 @@ async function testNetSuite() {
 // rejects with `{ status: 'error', message: 'Unknown action' }`. Reaching that
 // branch means the script ran to completion under this token's role.
 //
+// The probe carries `authorizedBy` + `agentPlanId` because since v1.22 the
+// RESTlet validates attribution BEFORE it dispatches on `action`
+// (`rejectMissingAttribution` in orderful_agentWrite_RL.ts). Without them the
+// reply is the attribution error, not "unknown action" — which this check used
+// to score as a FAIL on a perfectly healthy instance, sending you chasing a
+// permission problem that does not exist.
+//
+// Both replies are accepted as proof of life: either one can only come from
+// the RESTlet's own code, so either proves it is deployed and executed under
+// this token's role. Accepting both also keeps the probe working against
+// pre-v1.22 SuiteApps, which have no attribution check at all.
+//
 // This does NOT validate the `SuiteScript Scheduling` permission — that's only
 // exercised when the RESTlet calls `task.create()`. Skills that trigger
 // MapReduce jobs (e.g. `/run-poller`) will surface that perm gap on first use
@@ -150,7 +186,10 @@ async function testRestlet() {
   const res = await fetch(url, {
     method: 'POST',
     headers: { ...authHeader, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: '__connection_probe__' }),
+    body: JSON.stringify({
+      action: '__connection_probe__',
+      ...agentAttribution('netsuite-setup-connection-probe'),
+    }),
   });
   const text = await res.text();
   let body;
@@ -173,15 +212,20 @@ async function testRestlet() {
     return;
   }
 
-  // Expected success path: RESTlet handled the request and rejected the unknown action
-  if (
+  // Expected success path: the RESTlet handled the request and rejected it from
+  // inside its own code — either as an unknown action (attribution accepted) or
+  // as missing attribution (pre-v1.22 ordering, or a stricter build). Either
+  // reply proves the script is deployed and ran under this token's role.
+  const isRestletOwnRejection =
     res.ok &&
     body &&
     typeof body === 'object' &&
     body.status === 'error' &&
     typeof body.message === 'string' &&
-    body.message.toLowerCase().includes('unknown action')
-  ) {
+    (body.message.toLowerCase().includes('unknown action') ||
+      body.message.toLowerCase().includes('authorizedby and agentplanid'));
+
+  if (isRestletOwnRejection) {
     rlPass = true;
     console.log(`  RESTlet   PASS  (agent-write reachable, role has SuiteScript permission)`);
     return;
