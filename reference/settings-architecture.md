@@ -11,6 +11,7 @@ Reference doc for how the Orderful SuiteApp resolves a per-customer / per-vendor
 - **Vendors** resolve **vendor → subsidiary** — there is **no parent layer** (NS vendors aren't modeled with the customer parent/sub hierarchy).
 - The subsidiary-default fields are `custrecord_orderful_sub_*` on the Subsidiary record (Company Information on non-OneWorld). Set one there and every (sub)customer/vendor under it inherits unless it overrides locally.
 - **Handling preferences are the outbound gate** (the old `auto_send_asn` / generate-only model was removed in v1.22.0).
+- **`useEDIPricing` is the one exception to the chain** — a company-**global** "Use EDI Pricing" preference sits *above* subsidiary and customer and overrides both (see [EDI pricing](#edi-pricing--the-one-setting-with-a-company-global-override-layer)).
 
 ## The two resolution patterns
 
@@ -155,6 +156,37 @@ Outbound dispatch is gated by the relevant **handling preference** (a Pattern D 
 - credit memo → `creditMemoHandlingPrefs`; WSO / WST → their respective handling prefs.
 
 > **The legacy generate-only "auto-send" model was removed in v1.22.0.** The old per-ETT `auto_send_asn`-style flag no longer dispatches; the one-gate model is now handling-preference (Pattern D) + isProcessAsCustom (Pattern B). The SDF install script (`assertNoGenerateOnlyOutboundEtts`) actively fails the deploy if it finds a generate-only outbound ETT, forcing a human to set a handling preference / custom process or inactivate the ETT.
+
+## EDI pricing — the one setting with a company-global override layer
+
+`useEDIPricing` (trust the EDI-transmitted unit price over NetSuite's own item pricing) is the one setting whose resolution does **not** follow the customer → parent → subsidiary chain above. It has an extra **company-global layer that sits ON TOP and overrides everything below it**:
+
+```
+GLOBAL "Use EDI Pricing" checkbox   (SuiteApp General Preferences / company setup page)
+   ↓  (only if the global is OFF)
+subsidiary   custrecord_orderful_use_edi_pricing
+   ↓  (only if unset)
+customer     custentity_orderful_use_edi_pricing
+```
+
+The global **wins**: if the General Preferences "Use EDI Pricing" box is checked, `useEDIPricing` resolves **true for every customer in the account** even when the subsidiary and customer flags are both off — the inverse (top-down) of the standard chain. That global lives on the company-level **General Preferences** page, a settings surface **not** queryable by the obvious `customrecord_orderful_*` names (it also holds polling bucket id, polling limit, enable UOM mapping, allow 3PL fulfillment, merchant name/image).
+
+**Debug any EDI-pricing surprise global → subsidiary → customer, in that order.** When the global forces it on, the per-customer/subsidiary flags may not even appear in the resolved `metaData.customerConfig`.
+
+**What `useEDIPricing = true` does to the SO line:** the connector stamps the 850's transmitted unit price onto the line at price level **`-1` ("Custom")**, so the line `rate` equals the transmitted price. Tell-tale of the global being on when you didn't expect it: SO lines at price level **-1/Custom** with `rate` == `custcol_orderful_ordered_rate` instead of pricing from the customer's assigned level.
+
+**Fallback ladder when `useEDIPricing = false`** and the customer's assigned price level has no price for the item:
+
+```
+assigned price level  →  (no price there)  →  850 transmitted unit price (lands as price level -1/Custom)  →  item base/standard price
+```
+
+So an unlisted/new item can silently bill at the transmitted price even with `useEDIPricing` off — the exact case a zero-tolerance sale-rate check must catch. Making unlisted items fall back to the item's base/standard price instead is a connector change request, not a config toggle.
+
+**The price-review / approval-gate pattern.** `custcol_orderful_ordered_rate` ("EDI Ordered Price") is populated by the connector on **every** SO line with the 850's transmitted unit price — natively, no mapping. A common customer setup is a sale-rate discrepancy approval workflow that compares the line `rate` against a separate EDI-price custom field and holds the SO in **Pending Approval** on a variance beyond `priceTolerance` (`custentity_orderful_price_tolerance`, Pattern D above) for Sales to review.
+
+- A resulting Pending Approval is a **legitimate business gate, not a connector failure** — don't blanket-approve stuck orders or enable `autoAcknowledge` (`custentity_orderful_auto_acknowledge`) to bypass it once pricing is correct. Recurring same-item gaps usually mean stale price-level data or a wrong PO price at the retailer — fix it at the source.
+- If the customer's approval script reads a custom field **other than** the connector-native `custcol_orderful_ordered_rate`, that field must be populated separately. A `customrecord_orderful_edi_field_map_line` row can map the 850 unit price to it, but the line field-map has caused create-time issues on some connector builds; a scoped `beforeSubmit` User Event (per-entity, only-when-empty, never-overwrite, never-block) that copies `custcol_orderful_ordered_rate` → the target field is a safer alternative.
 
 ## Common "where does this come from?" answers
 
