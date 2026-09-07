@@ -106,7 +106,7 @@ jobs:
                   echo "Stripped all PR-controlled Claude config paths from pr-head."
 
             - name: Run Claude Code Review
-              uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1.0.187
+              uses: anthropics/claude-code-action@d75b94d5ad426cb8546e6628b6f5f19b84e5cce1 # v1.0.216
               env:
                   PR_NUMBER: ${{ github.event.pull_request.number }}
                   REPO: ${{ github.repository }}
