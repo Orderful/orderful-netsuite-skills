@@ -1,8 +1,14 @@
 # SuiteAnalytics Dataset spec grammar and platform limits
 
-Everything here was measured against a live account (2026-07) via the Dataset Lab RESTlet
-(`skills/manage-datasets/`). NetSuite documents almost none of it. The community typings
-(`@hitc/netsuite-types`) are wrong in several places noted below.
+Everything here was measured against a live account (2026-07) via the SuiteApp's dataset
+actions on the agent RESTlets (`skills/manage-datasets/`, NS-1142). NetSuite documents almost
+none of it. The community typings (`@hitc/netsuite-types`) are wrong in several places noted
+below.
+
+SuiteApp behaviour described here was read from **netsuite-connector `dev` @ `b81d2192`**,
+plus **#907 (NS-689)** where noted for the `SalesOrder` source column — that PR is not yet
+merged. Consumer-behaviour claims below cite the file they were verified against; re-check
+them against the connector when revisiting, and update the commit above.
 
 ## Join grammar (dataset columns)
 
@@ -79,7 +85,7 @@ add formula guard columns and condition on them:
 
 Measured effect on one real fulfillment: 3,841 fan-out rows → 60 correct carton×item rows,
 verified row-for-row against SuiteQL. Guard labels aren't in `LabelFieldMap`, so the label
-path ignores them harmlessly (they show up in the lab's `ignoredColumns` — expected).
+path ignores them harmlessly (they show up in a `describe`/`dry-run` response's `ignoredColumns` — expected).
 
 Caveat: item-match correlation keys on the **item**, so two SO lines with the same item won't
 be distinguished. Acceptable for label datasets keyed by item; check per use case.
@@ -118,7 +124,7 @@ RTRIM(SUBSTR(chunk, INSTR(chunk, '":"', -1) + 3), '"')
 | --- | --- |
 | `dataset.load({id})` | works — full columns + condition tree |
 | mutate loaded `columns` / replace `condition` | works in memory |
-| clear condition (`condition = null`) | **fails** — `Wrong parameter type`; conditions can be replaced, never removed, via script |
+| clear condition (`condition = null`) | **fails** — `Wrong parameter type`. Conditions can be replaced, never removed, via script. To neutralise a bad condition, *replace* it with a tautology, or rebuild the dataset under a new scriptid without one. |
 | rename via `ds.name = x` | **fails** — read-only; pass `name` to `save()` |
 | `save()` no-arg | **fails** — "Missing a required argument: options" (typings say `save(): void` — wrong) |
 | `save({name, id})` | works — returns `{id}` |
@@ -127,13 +133,61 @@ RTRIM(SUBSTR(chunk, INSTR(chunk, '":"', -1) + 3), '"')
 
 ## Runtime behavior of the SuiteApp consumers
 
-- Both the 856 packaging path and the label path **AND their own `Fulfillment = <id>`
-  condition onto the dataset's stored condition** at execution time. A dataset must not carry
-  its own fulfillment filter — the two ANDed together are false for every real fulfillment,
-  and the consumer then processes zero rows **silently** (labels just don't generate).
-- `getDatasetMapping` (labels) silently drops any column whose label isn't an exact
-  case-insensitive `LabelFieldMap` dotted path. A typo'd label = a blank field on the label,
-  no error anywhere.
+Both consumers narrow the dataset to one source transaction at execution time, but
+**they do it differently** — worth knowing precisely, because the two failure modes
+are opposite.
+
+| | Label path (`label/datasetMapping.ts`) | 856 packaging path (`Repositories/carton.repository.ts`) |
+| --- | --- | --- |
+| Trigger | `if (loadedDataset?.condition)` | `if (condition?.children && children.length > 0)` |
+| Any stored condition | ANDs its filter on | ANDs its filter on |
+| **Single-leaf** stored condition | ANDs it on | **REPLACES it** |
+| No stored condition | creates the filter | creates the filter |
+| Operator / values | `EQUAL`, single id | `ANY_OF`, array |
+
+Consequences:
+
+- **A dataset must not carry its own source filter.** On the label path a baked-in
+  `Fulfillment = <id>` becomes `<baked> AND <actual>`, false for every real
+  fulfillment, and the consumer processes zero rows **silently** — labels just don't
+  generate. Found live at a customer.
+- **On the packaging path, a single-leaf baked filter is silently *discarded* instead**
+  — rows come back, but whatever the dataset author intended that condition to do is
+  simply not applied. Opposite symptom, same root cause. The single-leaf replace is a
+  genuine SuiteApp bug, tracked as **NS-1188**.
+- The lab's `run` action ANDs whenever any condition exists (label-path behaviour),
+  deliberately: this endpoint must not show more rows than the real dataset returns.
+  For a packaging dataset with a single-leaf condition, `run` is therefore **stricter
+  than the packaging runtime** — it can show zero rows where production returns rows.
+  It is never looser. Don't read a zero-row `run` on such a dataset as proof the
+  runtime is broken.
+
+### Source columns (NS-689, connector #907)
+
+Packing can now happen against a **Sales Order**, before any Item Fulfillment exists,
+so a dataset may identify its source transaction by either column:
+
+- `columnConfigs` exports `SOURCE_TRANSACTION_COLUMN_LABELS = ['Fulfillment', 'SalesOrder']`.
+  Neither is individually `mandatory`; the **at-least-one** rule is enforced in
+  `validatePackagingAnalyticsDataSource`, and mirrored for labels in
+  `validateLabelContract`.
+- Every pre-NS-689 dataset stays valid unchanged.
+- The runtime filters on `SalesOrder` when the caller asked for SO cartons, otherwise
+  on `Fulfillment` — one column per run.
+- A formula-backed source column must return INTEGER (both paths filter it against
+  internal ids).
+- The source column is the filter, not a label field: it is neither `recognized` nor
+  `ignored` in the label contract result.
+
+### Silent-drop rule (label path)
+
+`getDatasetMapping` silently drops any column whose label isn't an exact
+case-insensitive `LabelFieldMap` dotted path. A typo'd label = a blank field on the
+label, no error anywhere. `LabelFieldMap` is the authority, not `LabelPayload` and not
+any hand-kept list — the connector reconstructs it in
+`TransactionHandling/label/labelFieldMap.ts` (#907) after the `@orderful/platform-types`
+import turned out to be a *type* used as a runtime value. Read the current paths from
+that file, or from a `describe` response's `ignoredColumns`; do not transcribe them.
 
 ## Misc
 
