@@ -94,6 +94,7 @@ Deleting custom-record entries needs **Custom Record Entries = Full** on the **L
 6. **One source transaction per invocation.** No batch mode. Run it again for the next document.
 7. **Don't delete across consolidations.** If a candidate OT links to other source transactions, skip it and tell the user — deleting it would affect documents you weren't asked to touch.
 8. **Don't paste credentials into chat.** Everything stays in the `.env`; the script reads it locally.
+9. **On SuiteApp v1.23.1+ a raced OT is REUSED, not replaced — never inactivate a "raced" OT without re-reading its status.** After NS-1176, the consolidation sweep (or a manual re-fire) flips the *same* raced Error OT to Success on its own internal id, instead of minting a fresh Success row. Older "re-fire the source flag, then inactivate the raced Error OT" tooling therefore **inactivates the now-successful OT** — hiding a healthy, delivered transaction (the EDI document is out on the wire regardless; only the NS record gets wrongly hidden). Before inactivating any raced OT, re-read its **current** status; if it is now Success, leave it active. Only genuinely orphaned pre-fix stragglers (whose ready flag was already cleared by the old code, so the sweep won't readmit them) still need a one-time manual re-fire — and even then, don't retire the resulting OT.
 
 ## Reference material
 
