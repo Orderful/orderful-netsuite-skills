@@ -1,6 +1,6 @@
 # Orderful NetSuite Skills
 
-AI-powered skills for NetSuite integration work, designed for Orderful contractors, OAs, and tech-savvy NS admins working through Claude Code.
+AI-powered skills for NetSuite integration work, built for anyone implementing EDI on NetSuite through Claude Code — Orderful contractors and OAs, NetSuite implementation partners and VARs, and technical NetSuite admins.
 
 ## Overview
 
@@ -13,6 +13,14 @@ A growing library of markdown skills that teach Claude Code how to:
 - Propose well-scoped fixes that you approve before they run
 
 Skills cite shared reference material (record types, common queries, REST patterns) so Claude has the right context without you having to paste it on every session.
+
+### Who this is for
+
+- **Orderful contractors and OAs** — onboarding customers and running production support.
+- **NetSuite implementation partners and VARs** — scoping, quoting, and delivering EDI as part of a NetSuite engagement.
+- **Technical NetSuite admins** — customer-side teams configuring and debugging their own EDI.
+
+This repo is public and Apache 2.0 licensed. There is nothing to request and no access to be granted — clone it and go.
 
 ## Getting Started
 
