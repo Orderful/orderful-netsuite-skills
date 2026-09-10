@@ -50,7 +50,7 @@ Run this BEFORE the transform. A SO can be `Pending Fulfillment` and still produ
 | Committed / on-hand | `transactionline.quantitycommitted` > 0; `aggregateItemLocation.quantityonhand` at the line location | nothing to ship |
 | **Native shipping address populated** | `GET /record/v1/salesOrder/{id}/shippingAddress` → `addr1`/`city`/`state`/`zip` | empty here → empty `N1*ST` on the 856 (and a tripwire for the inbound ship-to write bug — see [`inspect-inbound-diagnostics`](../inspect-inbound-diagnostics/SKILL.md)) |
 | Items resolved + unit set | line `item`, `units` | placeholder/unmapped items break the LIN loop |
-| Packing source decided | carton records (this skill) vs dataset (`custentity_orderful_pkg_data_src`) | the 856 generator hard-errors `"None of the following item fulfillments have cartons: <ifId>"` if neither yields cartons |
+| Packing source decided | Auto Pack (item field or packing group) vs hand-built carton records (this skill) vs dataset (`custentity_orderful_pkg_data_src`) | the 856 generator hard-errors `"None of the following item fulfillments have cartons: <ifId>"` if none yields cartons |
 
 If `isMultiShipTo = true` but the order is logically a single shipment (one destination, split only by shipping method — a frequent artifact of the inbound 850→SO mapping), flip it before transforming:
 
@@ -79,6 +79,14 @@ The REST transform does **not** auto-select lines to fulfill — an empty body y
 The 204 response carries the new Item Fulfillment ID in the `Location` header.
 
 ### Step 2 — Pack it: carton + shipped-item records
+
+**Check whether Auto Pack can do this for you first.** If the items carry `custitem_orderful_units_p_carton` or resolve to a packing group, the Auto Pack button builds these records in one click, with the correct sequencing and dimensions:
+
+```bash
+node ../configure-packing-groups/audit-packing-config.mjs ~/orderful-onboarding/<slug> --item <itemId>
+```
+
+Hand-build the records below when Auto Pack is not an option — no pack config exists, or the test needs a specific carton shape (a deliberate short carton, a mixed-item carton, a particular SSCC per carton) that a uniform units-per-carton rule cannot produce. That is a real and common need during certification; it just should not be the default. See [`configure-packing-groups`](../configure-packing-groups/SKILL.md) and [`auto-pack-fulfillment`](../auto-pack-fulfillment/SKILL.md).
 
 The SuiteApp's 856 generator builds the pack (P) and item (I) hierarchy levels from its **own** custom records, not from NetSuite's native Packages sublist. Create:
 

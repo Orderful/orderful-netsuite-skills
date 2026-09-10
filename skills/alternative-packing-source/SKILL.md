@@ -19,6 +19,16 @@ Use when the user says any of:
 
 If the user is asking about the SuiteApp's standard carton flow (where the connector creates customrecord_orderful_carton itself during fulfillment), this skill does NOT apply — that's the default and needs no setup.
 
+**A dataset is the third and most expensive of three packing paths.** Before building one, confirm the cheaper two do not fit:
+
+| Path | Config | Use when |
+|---|---|---|
+| Item field `custitem_orderful_units_p_carton` | One number per item, zero records | Uniform pack size per item |
+| Packing groups | Group + assignment records | Pallets, default dimensions, even distribution, or per-customer variation |
+| **Analytics dataset** (this skill) | A SuiteAnalytics Dataset | Carton/SSCC data already lives in a 3PL/WMS record and must be read as-is |
+
+The first two are [`configure-packing-groups`](../configure-packing-groups/SKILL.md). Reach for a dataset when the customer's carton data is *already authored elsewhere* — not merely because packing needs configuring.
+
 ## Prerequisites
 
 1. The user has already run `/netsuite-setup` for this customer. `~/orderful-onboarding/<slug>/.env` exists with valid TBA credentials.
