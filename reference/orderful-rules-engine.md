@@ -59,6 +59,12 @@ Common function ids (confirm against `GET /v2/rules/functions`):
 4. **Validation status lags the message.** After a rule change the transformed message can update while the stored `validationStatus` still shows the prior error, until the transaction is actually re-validated. Verify on a fresh transaction, not a cached status.
 5. **`delete` (id 57) works on nested loops**, e.g. `transactionSets.*.LIN_loop.*.QTY_loop.*.SCH_loop` with `delete()` drops that loop on every line item.
 
+6. **A `Reference` path containing array wildcards resolves to an ARRAY.** Handing it straight to a scalar function like `equals` gets the rule rejected in the Orderful UI with *"Unexpected arguments. Objects and Arrays are unsupported."* Wrap it in `index(ref, 0)` (id 46) to take the first element, or use `includes` (id 55), whose **first** argument is the array and second the scalar to look for. The numeric argument node is `{"type":"Number","value":0}`.
+7. **The REST API does not validate the expression AST.** A structurally-wrong expression is accepted with `201`/`200` and reads back byte-identical over `GET` — it only fails in the UI (and, presumably, at evaluation time). There is no preview or dry-run endpoint: `/v2/rules/{test,preview,simulate,evaluate}` all 404. After writing a rule over REST, **open it in the Rules Editor and confirm there's no error banner.**
+8. **Omitting `liveExpression` on create is accepted and leaves it `null`** — the clean way to stage a rule against the test stream without touching live traffic. It then has to be promoted deliberately at cutover; a test-only rule means live transactions get none of the transform on day one.
+
 ## Worked example
 
 See [`aafes-dsco.md`](aafes-dsco.md) → "AAFES DSCO 846 rule set" for a full 9-rule set (set-constant, `concatenate` time pad, item-id qualifier remaps, `delete` of a segment and a nested loop) that takes the SuiteApp's default 846 output to a partner-valid message.
+
+For using a rule to steer *which NetSuite customer* an inbound transaction resolves to (one partner ISA feeding several customer records), see [`inbound-customer-disambiguation.md`](inbound-customer-disambiguation.md).
