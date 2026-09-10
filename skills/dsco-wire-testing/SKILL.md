@@ -108,3 +108,19 @@ Completion is confirmed by **emailing the retailer's dropship-onboarding team**.
 
 - [`reference/nordstrom-dsco.md`](../../reference/nordstrom-dsco.md) — Nordstrom-specific program facts (account model, contacts, pre-activation gates, activation email format)
 - Related skills: `audit-outbound-rules`, `inject-test-transaction`, `build-mock-fulfillments`, `bill-and-fire-810`, `fetch-validations`, `writing-inbound-jsonata`, `writing-outbound-jsonata`, `reprocess-transaction`, `cleanup-orderful-transactions`, `custom-process-transactions`
+
+## Document ordering: an 810 that lands before its 856 is silently rejected
+
+DSCO/Rithum **refuses to apply an invoice to items not yet marked shipped**, and a failed invoice import is **never retried automatically**. So if an order's **810 (invoice) reaches DSCO before its 856 (ship notice) has been applied**, the invoice is rejected — and it surfaces only in the portal Order History (an "Invoice Added — Error — FAILURE — No items from PO … are available to be invoiced" line) or a customer email, **not** as an EDI/validation error. A `997 ACCEPTED` on the 810 does not mean it was applied (see [partner-acceptance-semantics](../../reference/partner-acceptance-semantics.md)).
+
+**How the race happens:** the 810 fires on invoice creation and the 856 on shipment. When a customer auto-bills seconds after fulfillment, both can land in the **same** hourly Rithum import batch (observed ~:16–:27 past the hour), and DSCO may process the invoice before the shipment.
+
+**Recovery (idempotent, safe):** after the 856 has been applied, re-send the 810:
+
+```
+POST /v2/transactions/{id}/send    body { "requesterId": <orgId> }
+```
+
+(v3 `/send` 404s; v2 without `requesterId` 400s.) Re-delivery applies nothing if the invoice already posted, and lets it apply on the next batch if it was rejected.
+
+**Go-live runbook:** always **ship-then-invoice**, and keep an 810-resend safety net until at least one order is proven to ship *and* invoice cleanly within a batch. If the retailer shows "shipped but not invoiced," this ordering race is the first thing to check.
