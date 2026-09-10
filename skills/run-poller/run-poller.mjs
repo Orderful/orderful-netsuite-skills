@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import OAuth from 'oauth-1.0a';
 import crypto from 'node:crypto';
+import { userInfo as osUserInfo } from 'node:os';
 
 const SCRIPT_ID = 'customscript_orderful_agent_write_rl';
 const DEPLOY_ID = 'customdeploy_orderful_agent_write_rl';
@@ -23,6 +24,29 @@ if (!existsSync(envPath)) {
 }
 
 loadEnv({ path: envPath });
+
+// ---------- agent-write attribution ----------
+//
+// Since v1.22 the agent-write RESTlet rejects any request missing
+// `authorizedBy` + `agentPlanId`, and it does so BEFORE dispatching on
+// `action` (`rejectMissingAttribution` in orderful_agentWrite_RL.ts). Both
+// values land in the NetSuite audit trail, so they must identify the human who
+// actually ran the command — NetSuite's own audit attributes the call to the
+// integration user, and these fields are what close that gap.
+//
+// `authorizedBy` resolves from AGENT_AUTHORIZED_BY in the customer's .env,
+// falling back to the OS user as `cli:<user>`. The fallback is deliberately
+// not a plausible-looking email: guessing one would attribute your writes to
+// somebody else in a permanent audit record.
+function agentAttribution(planLabel) {
+  const authorizedBy =
+    process.env.AGENT_AUTHORIZED_BY?.trim() || `cli:${osUserInfo().username}`;
+  const customer = process.env.CUSTOMER_SLUG?.trim() || 'unknown-customer';
+  const agentPlanId =
+    process.env.AGENT_PLAN_ID?.trim() ||
+    `${planLabel}-${customer}-${new Date().toISOString().slice(0, 10)}`;
+  return { authorizedBy, agentPlanId };
+}
 
 const envMode = (process.env.ENVIRONMENT || 'sandbox').toLowerCase();
 if (envMode !== 'sandbox' && envMode !== 'production') {
@@ -74,7 +98,10 @@ const token = {
   key: process.env[`${nsPrefix}_TOKEN_ID`],
   secret: process.env[`${nsPrefix}_TOKEN_SECRET`],
 };
-const requestBody = JSON.stringify({ action: 'triggerInboundPolling' });
+const requestBody = JSON.stringify({
+  action: 'triggerInboundPolling',
+  ...agentAttribution('run-poller'),
+});
 const requestData = { url, method: 'POST' };
 const authHeader = oauth.toHeader(oauth.authorize(requestData, token));
 authHeader.Authorization += `, realm="${accountId}"`;
