@@ -192,3 +192,4 @@ Don't deploy to prod until sandbox is green.
 - [Orderful: Custom Process Outbound Transactions](https://docs.orderful.com/docs/custom-process-outbound-transactions) — canonical for outbound mechanics including the three trigger modes (status-based, button, workflow action) and payload format detection.
 - `writing-inbound-jsonata`, `writing-outbound-jsonata` — try these *first*.
 - `inject-test-transaction` — sandbox validation for inbound.
+- [`which-script-ran`](../which-script-ran/SKILL.md) — `scriptnote` holds the **customer's** custom-process script logs too, not just the SuiteApp's: read them over SuiteQL by the customer script's scriptid. A stuck Pending-Custom-Process OT is diagnosed in the *customer's* script log — never in any `customscript_orderful_*` log.

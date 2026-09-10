@@ -71,7 +71,7 @@ node skills/monitor-mr/monitor-mr.mjs <customer-dir> watch --flow inbound-pollin
 
 It blocks until the task completes, surfaces the execution log (including the end-of-run SUMMARY with `mapErrors`/`reduceErrors`), and flags the chained processing run. Manual fallback: NetSuite UI **Customization > Scripting > Script Deployments > "Orderful | Polling Inbound Transactions" > Execution Log**.
 
-Heads-up when verifying downstream: the chained inbound-processing run skips OTs modified <10 minutes ago, so transactions polled just now typically process on a *later* scheduled cycle — or immediately via [reprocess-transaction](../reprocess-transaction/SKILL.md) for a specific id. See [reference/mapreduce-monitoring.md](../../reference/mapreduce-monitoring.md).
+Heads-up when verifying downstream: if the chained inbound-processing run shows `mapKeys: {}`, check whether the poll actually created OTs and whether they pass the pending-query filters — per source the ~10-minute freshness gate only bites around 00:00–00:10 account time, so it's rarely the reason (see [reference/mapreduce-monitoring.md](../../reference/mapreduce-monitoring.md)). To push one specific id through immediately, use [reprocess-transaction](../reprocess-transaction/SKILL.md). For after-the-fact "what did the scripts log about this transaction?", use [`which-script-ran`](../which-script-ran/SKILL.md).
 
 ### Required role permissions
 

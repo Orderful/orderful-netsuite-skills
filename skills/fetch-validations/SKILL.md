@@ -118,4 +118,5 @@ You'll often pair this skill with the public `/v3` transaction endpoints while i
 ## Reference material
 
 - [`reference/orderful-internal-api.md`](../../reference/orderful-internal-api.md) — catalog of UI endpoints (validations, schemas, element-codes, rules, etc.) discovered via HAR analysis. Useful as a starting point for any future tooling that wants to introspect the Orderful platform.
-- The Orderful public API docs cover only the `/v3/...` endpoints. The `/v2/...` endpoints used here are not documented externally, but accept the same API key.
+- The Orderful public API docs cover only the `/v3/transactions` listing endpoint. The `/v2/...` UI endpoints used here are not documented externally, but accept the same API key (see Behaviour rule 3).
+- [`which-script-ran`](../which-script-ran/SKILL.md) — when the validation errors trace back to NetSuite-side generation (wrong/missing content in the message itself), read the generating script's execution logs over SuiteQL to see what built the payload and whether it errored.

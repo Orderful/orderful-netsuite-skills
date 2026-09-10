@@ -44,6 +44,6 @@ Notes:
 
 ## Cross-cutting
 
-- **Outbound handling prefs gate whether the MR fires at all.** `custentity_orderful_poack_handling_prefs` (855), `custentity_orderful_asn_handling_prefs` (856), `custentity_orderful_inv_handling_prefs` (810). An unset pref silently prevents the corresponding outbound — check it before assuming a mapping problem.
-- **`custrecord_edi_enab_trans_auto_send_asn`** on the doc-type ECT row must be `T` for auto-send.
+- **Outbound handling prefs gate whether generation fires at all** (regardless of host — UE-inline or consolidation MR; routing: [script-execution-map.md](script-execution-map.md) §3). `custentity_orderful_poack_handling_prefs` (855), `custentity_orderful_asn_handling_prefs` (856), `custentity_orderful_inv_handling_prefs` (810). An unset pref silently prevents the corresponding outbound — check it before assuming a mapping problem. Resolution falls through customer → parent → subsidiary default ([outbound-dispatch.md](outbound-dispatch.md)).
+- **`custrecord_edi_enab_trans_auto_send_asn`** on the ECT row is **vestigial as of SuiteApp v1.22.0** (NS-1037 made the handling preference the sole gate) — still visible in NetSuite, but setting it changes nothing. Accounts still on **< v1.22.0** do need it `T` on each outbound ECT.
 - **A populated source attribute is necessary but not sufficient.** Even a complete source record can produce an `INVALID` message if the partner guideline requires qualifiers the SuiteApp default doesn't emit — that's a mapping problem, not a readiness gap. See [`writing-outbound-jsonata`](../skills/writing-outbound-jsonata/SKILL.md).

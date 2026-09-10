@@ -7,6 +7,8 @@ Use this reference when scoping a custom-process script for 940 / 943 / 944 / 94
 - Which 3PL is on which side of the flow
 - What downstream EDI the SuiteApp will fire automatically vs. what your script has to handle
 
+> **The SuiteApp also ships native 9xx handlers** — inbound 945/944 processing (Item Fulfillment / Item Receipt creation) and outbound 940/943 generation run natively when the ETT isn't process-as-custom. Script names, triggers, and log homes: [script-execution-map.md](script-execution-map.md). The "custom script" steps below describe the custom-process alternative used when native mapping doesn't fit.
+
 ---
 
 ## EDI 940 — Warehouse Shipping Order (outbound)
@@ -59,7 +61,7 @@ Notification to the *receiving* 3PL that a shipment is on its way.
 
 ### Case 2: from Inbound Shipment / Purchase Order cycle (no 940)
 - PO created with vendor → Inbound Shipment created in NetSuite.
-- Custom script generates **943** from the Inbound Shipment → sent to the receiving 3PL.
+- Custom script generates **943** from the Inbound Shipment → sent to the receiving 3PL. (The Inbound Shipment source is **custom-process-only** — the native 943 handler sources from the PO or a transfer-related IF; see [script-execution-map.md](script-execution-map.md) §1.)
 - No 940 involved — this is a buying/receiving cycle, not a shipping cycle.
 - Vendor ships goods directly to the 3PL warehouse.
 - 3PL receives and sends back **944**.

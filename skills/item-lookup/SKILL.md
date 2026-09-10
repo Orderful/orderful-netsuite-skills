@@ -19,6 +19,8 @@ Use when the user says any of:
 
 If the user is asking about a different failure mode (a stuck 855, a packing-group issue, a field-mapping problem), do NOT load this skill — it's specific to inbound-850 item-lookup failures.
 
+**Non-native inbound types (875, etc.) do NOT resolve items through `customrecord_orderful_item_lookup` on the native path.** Only `850`, `860`, `945`, `944`, `947` (`NATIVE_SUPPORTED_INBOUND_TRX_TYPES`) run the built-in item-lookup resolution this skill describes. Everything else — including the **875** (Grocery Products PO) — is processed entirely through the customer's **JSONata** mapping. Those mappings typically resolve items by UPC against the NetSuite item master (`$lookupItems($upc, "upccode")`) and do **not** read the item-lookup table unless the JSONata explicitly calls `$lookupItemMappings`. So for a failing 875/non-native transaction, editing (or adding rows to) the item-lookup table has no effect unless the mapping is wired to consult it — debug the JSONata (see [`writing-inbound-jsonata`](../writing-inbound-jsonata/SKILL.md)), not the lookup table. (The inactive-item caveat still applies either way: the connector's lookup joins filter `item.isinactive != 'T'`, and NetSuite won't put an inactive item on a transaction — a single unresolvable line fails the whole PO.)
+
 ## Prerequisites
 
 This skill assumes the user has already run the `netsuite-setup` skill for the customer in question. That skill creates `~/orderful-onboarding/<customer-slug>/.env` containing `NS_SB_*` / `NS_PROD_*` TBA credentials and `ORDERFUL_API_KEY`, plus an `ENVIRONMENT=sandbox|production` selector.
@@ -185,6 +187,8 @@ If the user confirms, restate the manual steps clearly. If they want to do it vi
 - **Trailing whitespace / hidden chars in the lookup value.** If `UPPER(value) = UPPER(:value)` looks like it should match but doesn't, suspect non-printable characters. Tell the user to inspect the existing record's value field for whitespace.
 - **Wrong subsidiary restriction.** If the customer's transaction is in subsidiary A but the lookup is restricted to subsidiary B, no match. Cross-check `custrecord_orderful_item_subsidiary` against the transaction's subsidiary.
 - **Inactive item.** The proposed `ns_item_id` must be active (`item.isinactive = 'F'`). If it's inactive, the lookup will fire but the downstream sales-order creation will fail. Verify before proposing.
+- **UOM mapping does NOT fire for lookup-resolved items — check line units after the fix lands.** Verified live: with a correct UOM mapping in place (e.g. `CA → Master Case`), 850 lines whose items matched via a lookup record still landed on the SO in the item's *base unit* — quantities and amounts silently wrong, nothing errors. After the user creates the lookup and reprocesses, always verify the resulting SO line `units` against what the PO's UOM implies; if the customer orders in cases/packs, expect to have the user patch line units + quantity + rate until the SuiteApp gap is fixed. Propose the units check as part of the fix, not as an afterthought.
+- **Authoring a UOM mapping record: names don't work.** `custrecord_orderful_uom_target` rejects unit *names* ("Master Case", "CS") — it needs the unit's **internal id**, and the Target UOM Type field must be populated, or the record saves but never matches.
 
 ## Reference material
 
