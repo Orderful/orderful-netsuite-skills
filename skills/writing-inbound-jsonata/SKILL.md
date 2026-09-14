@@ -18,10 +18,11 @@ Use when the user says any of:
 - Anything about `$defaultValues`, `lookupContact`, `lookupItems`, `userDefinedFields`, BDO transformation
 - The user shares a screenshot of the SuiteApp Advanced Mapping UI (three-pane editor with raw transaction on left, JSONata in middle, transaction JSON on right)
 
-**Scope:** This skill covers **inbound 850 only**. The same engine handles 875, 944, 945, 947, and 860 — patterns transfer, but field shapes and helper applicability differ. For outbound (855/856/810/etc.), use `writing-outbound-jsonata` instead.
+**Scope:** This skill covers **inbound 850 only**. The same engine handles 875, 944, 945, 947, and 860 — patterns transfer, but field shapes and helper applicability differ. For the 860 (Purchase Order Change), use [`writing-860-jsonata`](../writing-860-jsonata/SKILL.md) — it edits existing Sales Orders and ignores several fields the 850 honours. For outbound (855/856/810/etc.), use `writing-outbound-jsonata` instead.
 
 **Don't use this skill for:**
 - Outbound mappings (different engine, different input shape)
+- 860 change-request mappings — [`writing-860-jsonata`](../writing-860-jsonata/SKILL.md)
 - Workflow-level customization that needs SuiteScript (User Event scripts, Map/Reduce hooks)
 - Creating standalone NetSuite custom records as a side effect of inbound — advanced mapping outputs **one** Sales Order BDO; spawning ancillary records requires a developer extensibility hook (see the docs site's "Developer Extensibility Guide")
 
