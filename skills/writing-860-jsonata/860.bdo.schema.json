@@ -1,0 +1,255 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/Orderful/netsuite-connector/schemas/860.bdo.schema.json",
+  "title": "860 Purchase Order Change Request — Business Data Object",
+  "description": "The value an 860 Advanced Mapping JSONata expression must return. The expression's result REPLACES the native BDO (exposed as $defaultValues), so it must carry this whole shape — build on $defaultValues with the transform operator rather than constructing it from scratch. Every NetSuite-side identity (item, sales order, line) is resolved by the connector from the fields below; the BDO cannot name NetSuite records directly. See examples/860.md.",
+  "type": "object",
+  "required": ["transaction", "metadata", "errors"],
+  "properties": {
+    "transaction": { "$ref": "#/definitions/transaction" },
+    "metadata": { "$ref": "#/definitions/metadata" },
+    "errors": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Mapper errors. Carried into the reduce step but not consumed by the 860 processor; keep $defaultValues.errors."
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "yyyymmdd": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9]{8}$",
+      "description": "X12 date as YYYYMMDD. Parsed with parseDate(yyyyMMdd) at apply time; an unparseable value fails the header change. null = no change requested for that date."
+    },
+    "nullableString": { "type": ["string", "null"] },
+    "transaction": {
+      "type": "object",
+      "required": ["purchaseOrderNumber", "transactionLines"],
+      "properties": {
+        "transactionId": {
+          "$ref": "#/definitions/nullableString",
+          "description": "ST02 transaction set control number. Informational only — never read by the applier."
+        },
+        "purchaseOrderNumber": {
+          "type": "string",
+          "description": "BCH03. Must equal (exact string match) the PO number of exactly one inbound 850 Orderful Transaction record; that 850's linked Sales Orders are the change targets. Zero or several matching 850s is a fatal error."
+        },
+        "purchaseOrderType": {
+          "$ref": "#/definitions/nullableString",
+          "description": "BCH02. Carried, never read."
+        },
+        "purposeCode": {
+          "$ref": "#/definitions/nullableString",
+          "description": "BCH01. Carried, never read."
+        },
+        "orderDate": {
+          "$ref": "#/definitions/yyyymmdd",
+          "description": "BCH05 → custbody_orderful_edi_po_date on every targeted Sales Order (and trandate when the customer's Use 850 Date setting is on). Subject to the Allow Date Changes setting."
+        },
+        "requestedShipDate": {
+          "$ref": "#/definitions/yyyymmdd",
+          "description": "DTM*010 → shipdate. Subject to the Allow Date Changes setting."
+        },
+        "startDate": {
+          "$ref": "#/definitions/yyyymmdd",
+          "description": "DTM*196 → startdate. Subject to the Allow Date Changes setting."
+        },
+        "endDate": {
+          "$ref": "#/definitions/yyyymmdd",
+          "description": "DTM*197 → enddate. Subject to the Allow Date Changes setting."
+        },
+        "earliestDelivery": {
+          "$ref": "#/definitions/yyyymmdd",
+          "description": "DTM*064 → custbody_orderful_earliest_delivery. Subject to the Allow Date Changes setting."
+        },
+        "latestDelivery": {
+          "$ref": "#/definitions/yyyymmdd",
+          "description": "DTM*063 → custbody_orderful_latest_delivery. Subject to the Allow Date Changes setting."
+        },
+        "hasStoreDistributions": {
+          "type": "boolean",
+          "description": "True when any POC loop carried an SDQ segment. Informational only — the applier looks at each line's storeDistributions instead."
+        },
+        "transactionLines": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/line" },
+          "description": "One entry per POC loop. Order does not matter; lines are matched to Sales Order lines by resolved NetSuite item, never by position or POC01."
+        },
+        "userDefinedFields": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["string", "number", "boolean", "null"]
+          },
+          "description": "Body-level custom fields (custbody_*) applied to EVERY Sales Order this 860 modifies, via setValue — or setText for ids listed in _textFields. 'T'/'F'/'true'/'false' strings are coerced to booleans; null/undefined values are skipped (the field is left unchanged)."
+        },
+        "_textFields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Field ids within userDefinedFields to apply with setText instead of setValue (dates, percentages, selects by display name). Note: on the 860 this sits beside userDefinedFields, not inside it."
+        }
+      },
+      "additionalProperties": true
+    },
+    "line": {
+      "type": "object",
+      "required": ["changeCode", "item"],
+      "properties": {
+        "changeCode": {
+          "type": "string",
+          "enum": [
+            "AI",
+            "CA",
+            "CF",
+            "CT",
+            "DI",
+            "NC",
+            "PC",
+            "PQ",
+            "QC",
+            "QD",
+            "QI",
+            "RE",
+            "RZ"
+          ],
+          "description": "POC02 Change or Response Type Code. Decides which change(s) the line produces — see the change-code table in examples/860.md. Any other value fails the line."
+        },
+        "quantity": {
+          "type": ["number", "null"],
+          "description": "POC03 Quantity Ordered. Carried, never applied."
+        },
+        "quantity1": {
+          "type": ["number", "null"],
+          "description": "POC04 Quantity Left to Receive. THE new line quantity for quantity changes and additions — unless the line has storeDistributions, whose per-store quantity takes precedence. Must be a number, not a string."
+        },
+        "unitPrice": {
+          "type": ["string", "number", "null"],
+          "description": "POC08 unit price. New rate for price changes and additions; parsed with parseFloat. A price change with no unitPrice fails the line."
+        },
+        "item": { "$ref": "#/definitions/item" },
+        "storeDistributions": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/storeDistribution" },
+          "description": "From the POC loop's SDQ segments. When present, each entry targets ONE Sales Order (resolved from storeId) and supplies that order's quantity. Required for quantity changes on a PO split across several Sales Orders."
+        },
+        "transactionLineId": {
+          "type": ["integer", "null"],
+          "description": "Ignored. Present for historical reasons; the native mapper always emits null and the applier only interpolates it into error messages."
+        }
+      },
+      "additionalProperties": true
+    },
+    "item": {
+      "type": "object",
+      "description": "Product identifiers from the POC loop, bucketed by X12 235 qualifier. This is the ONLY input to item resolution: (1) an Orderful Item Lookup record with the matching qualifier code + exact value, else (2) the item master's SKU field (seller.vendorNumber || seller.vendorPartNumber) or UPC field (universal.upc || upcEANContainerCode || ean || eanUCC8). All three sub-objects must be present (null members are fine); a missing sub-object throws. Any other key — including netsuiteItemId — is ignored.",
+      "required": ["buyer", "seller", "universal"],
+      "properties": {
+        "buyer": {
+          "type": "object",
+          "properties": {
+            "buyerCatalogNumber": {
+              "$ref": "#/definitions/nullableString",
+              "description": "CB"
+            },
+            "buyerItemNumber": {
+              "$ref": "#/definitions/nullableString",
+              "description": "IN"
+            },
+            "buyerPartNumber": {
+              "$ref": "#/definitions/nullableString",
+              "description": "BP"
+            },
+            "sku": {
+              "$ref": "#/definitions/nullableString",
+              "description": "SK"
+            }
+          },
+          "additionalProperties": true
+        },
+        "seller": {
+          "type": "object",
+          "properties": {
+            "vendorStyleNumber": {
+              "$ref": "#/definitions/nullableString",
+              "description": "IB"
+            },
+            "vendorNumber": {
+              "$ref": "#/definitions/nullableString",
+              "description": "VN — also matched against the item master SKU field"
+            },
+            "vendorPartNumber": {
+              "$ref": "#/definitions/nullableString",
+              "description": "VP — also matched against the item master SKU field"
+            },
+            "brandLabel": {
+              "$ref": "#/definitions/nullableString",
+              "description": "BL"
+            },
+            "productType": {
+              "$ref": "#/definitions/nullableString",
+              "description": "TP"
+            }
+          },
+          "additionalProperties": true
+        },
+        "universal": {
+          "type": "object",
+          "properties": {
+            "ean": {
+              "$ref": "#/definitions/nullableString",
+              "description": "EN — also matched against the item master UPC field"
+            },
+            "eanUCC8": {
+              "$ref": "#/definitions/nullableString",
+              "description": "EO — also matched against the item master UPC field"
+            },
+            "upc": {
+              "$ref": "#/definitions/nullableString",
+              "description": "UP — also matched against the item master UPC field"
+            },
+            "upcEANContainerCode": {
+              "$ref": "#/definitions/nullableString",
+              "description": "UK — also matched against the item master UPC field"
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "storeDistribution": {
+      "type": "object",
+      "required": ["storeId", "quantity"],
+      "properties": {
+        "storeId": {
+          "type": "string",
+          "description": "SDQ identification code (store or DC number). Resolved to a Sales Order by: shipping-address store number, then DC number (DC-consolidated orders), then a line item's store number. No match fails the whole line."
+        },
+        "storeIdQualifier": {
+          "$ref": "#/definitions/nullableString",
+          "description": "SDQ02 identification code qualifier (e.g. 92). Carried, never read."
+        },
+        "quantity": {
+          "type": ["number", "null"],
+          "description": "Quantity for this store. Takes precedence over the line's quantity1 for the Sales Order this entry targets."
+        },
+        "unitOfMeasure": {
+          "$ref": "#/definitions/nullableString",
+          "description": "SDQ01 unit. Carried, never read — the applied unit comes from the resolved item's sale unit."
+        }
+      },
+      "additionalProperties": true
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "const": "860_PURCHASE_ORDER_CHANGE_REQUEST_BUYER",
+          "description": "Routes the transaction to the 860 processor after mapping. If this is missing or changed, processing fails with 'Unsupported transaction type'. Note the key is `metadata` on the 860 (the 850 BDO uses `metaData`)."
+        }
+      },
+      "additionalProperties": true,
+      "description": "Orderful transaction metadata as built by the native mapper. Keep $defaultValues.metadata as-is; only `type` is read downstream."
+    }
+  }
+}
