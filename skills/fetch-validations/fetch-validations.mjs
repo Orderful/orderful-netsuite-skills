@@ -1,16 +1,20 @@
 #!/usr/bin/env node
 // Copyright (c) 2026 Orderful, Inc.
 
-// Fetch structured per-transaction validation errors from Orderful's UI API.
+// Fetch structured per-transaction validation errors from Orderful.
 // See SKILL.md for end-to-end usage.
 //
 // Usage:
 //   node fetch-validations.mjs <txId> [<txId>...]
 //
-// Auth: a UI session JWT. Resolved in this order:
-//   1. process.env.ORDERFUL_UI_JWT
-//   2. Authorization: Bearer header extracted from a HAR file
+// Auth, in order of preference:
+//   1. Plain API key (sent as `orderful-api-key`; works despite the /v2 UI namespace):
+//      process.env.ORDERFUL_API_KEY, or ORDERFUL_API_KEY from the most recent
+//      customer .env under ~/orderful-onboarding/*/.env
+//   2. UI session JWT (sent as `Authorization: Bearer`):
+//      process.env.ORDERFUL_UI_JWT, or extracted from a HAR file
 //      (default path: ~/Desktop/ui.orderful.com.har; override with $ORDERFUL_HAR_PATH)
+//   On a 401/403 with the API key, retries with the JWT when one is available.
 //
 // Org ID: resolved in this order:
 //   1. --org=<id> flag
@@ -30,33 +34,42 @@ if (!txIds.length) {
   process.exit(1);
 }
 
-const ORG_ID = orgIdFromFlag || process.env.ORDERFUL_ORG_ID || resolveOrgFromOnboardingEnvs();
+const ORG_ID = orgIdFromFlag || process.env.ORDERFUL_ORG_ID || resolveFromOnboardingEnvs('ORDERFUL_ORG_ID');
 if (!ORG_ID) {
   console.error('No org ID resolved. Pass --org=<id>, set $ORDERFUL_ORG_ID, or configure a customer .env at ~/orderful-onboarding/<slug>/.env with ORDERFUL_ORG_ID.');
   process.exit(1);
 }
 
+const API_KEY = process.env.ORDERFUL_API_KEY || resolveFromOnboardingEnvs('ORDERFUL_API_KEY');
 const JWT = process.env.ORDERFUL_UI_JWT || resolveJwtFromHar();
-if (!JWT) {
-  console.error('No JWT found. Set ORDERFUL_UI_JWT, or capture a HAR from the Orderful UI (DevTools > Network > Save all as HAR with content) and place it at ~/Desktop/ui.orderful.com.har (or set $ORDERFUL_HAR_PATH).');
+if (!API_KEY && !JWT) {
+  console.error('No auth found. Set ORDERFUL_API_KEY (preferred; also picked up from ~/orderful-onboarding/<slug>/.env), or set ORDERFUL_UI_JWT / capture a HAR at ~/Desktop/ui.orderful.com.har (see SKILL.md Step 1).');
   process.exit(1);
 }
 
-inspectJwtExpiry(JWT);
+if (JWT) inspectJwtExpiry(JWT);
 
 for (const txId of txIds) {
   const url = `https://api.orderful.com/v2/organizations/${ORG_ID}/transactions/${txId}/validations`;
-  const r = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${JWT}`,
-      'X-Orderful-Client': 'ui',
-      'X-ActingOrgId': String(ORG_ID),
-      Accept: 'application/json',
-    },
-  });
+  let r = null;
+  if (API_KEY) {
+    r = await fetch(url, {
+      headers: { 'orderful-api-key': API_KEY, Accept: 'application/json' },
+    });
+  }
+  if ((!r || r.status === 401 || r.status === 403) && JWT) {
+    r = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${JWT}`,
+        'X-Orderful-Client': 'ui',
+        'X-ActingOrgId': String(ORG_ID),
+        Accept: 'application/json',
+      },
+    });
+  }
   console.log(`\n=== Tx ${txId} (HTTP ${r.status}) ===`);
   if (r.status === 401 || r.status === 403) {
-    console.log('  Auth failed. JWT likely expired — recapture (see SKILL.md Step 1).');
+    console.log('  Auth failed. The API key may belong to a different org than the transaction, or the JWT expired — see SKILL.md Step 1.');
     continue;
   }
   if (r.status >= 400) {
@@ -128,7 +141,7 @@ function inspectJwtExpiry(jwt) {
   }
 }
 
-function resolveOrgFromOnboardingEnvs() {
+function resolveFromOnboardingEnvs(name) {
   const dir = resolve(process.env.HOME, 'orderful-onboarding');
   if (!existsSync(dir)) return null;
   // Pick the most recently modified .env across customer dirs.
@@ -141,7 +154,7 @@ function resolveOrgFromOnboardingEnvs() {
   candidates.sort((a, b) => b.mtime - a.mtime);
   for (const c of candidates) {
     const text = readFileSync(c.path, 'utf-8');
-    const m = text.match(/^ORDERFUL_ORG_ID\s*=\s*(.+)$/m);
+    const m = text.match(new RegExp(`^${name}\\s*=\\s*(.+)$`, 'm'));
     if (m) return m[1].trim().replace(/^['"]|['"]$/g, '');
   }
   return null;

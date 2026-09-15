@@ -1,16 +1,15 @@
 # Orderful internal/UI API endpoints (HAR-derived)
 
-The `/v3/transactions` listing endpoint is the only Orderful API endpoint with public-API-key auth and external documentation. The Orderful UI itself uses a much richer set of `/v2/...` endpoints, authed via a session JWT (Bearer token from the logged-in user's session).
+Only the `/v3/...` endpoints have external documentation. The Orderful UI itself uses a much richer set of `/v2/...` endpoints. The UI auths them with a session JWT, but at least some of them (verified: `/v2/.../validations`, `/v2/rules`) also accept the plain public `orderful-api-key` header — try the API key first before bothering with a HAR capture.
 
 This doc catalogs the UI endpoints discovered via HAR captures of `https://ui.orderful.com`. They are **undocumented** and could change without notice — but they're the only practical path to schema and validation data programmatically.
 
 ## Auth
 
-- **`Authorization: Bearer <JWT>`** — UI session JWT. Captured from any HAR export of a logged-in UI session. Lifetime ~24h.
-- **`X-Orderful-Client: ui`** — required header.
-- **`X-ActingOrgId: <orgId>`** — required header; identifies the org context.
+Two options, in order of preference:
 
-The `orderful-api-key` header is **not** used by UI endpoints.
+- **`orderful-api-key: <key>`** — the plain public API key. Verified to work on `/v2/.../validations` and `/v2/rules` (mid-2026); not every `/v2` endpoint has been tested, so if one 401s, fall back to the JWT. No expiry, no extra headers needed. The key must belong to the org in the URL/params.
+- **`Authorization: Bearer <JWT>`** — UI session JWT, captured from any HAR export of a logged-in UI session. Lifetime ~24h. Requires two extra headers: **`X-Orderful-Client: ui`** and **`X-ActingOrgId: <orgId>`** (identifies the org context).
 
 ## Endpoint catalog
 
@@ -162,4 +161,4 @@ POST /v3/validate     -- ad-hoc validation of a draft message payload
 3. Click around the UI to exercise whichever endpoints you need (transaction Errors tab, etc.).
 4. Right-click in the Network panel → **Save all as HAR with content**.
 
-The skills repo's `fetch-validations.mjs` reads the most recent HAR at `~/Desktop/ui.orderful.com.har` by default; override with `$ORDERFUL_HAR_PATH`.
+The skills repo's `fetch-validations.mjs` uses a HAR only as its JWT fallback (when no `ORDERFUL_API_KEY` is available); it reads the most recent HAR at `~/Desktop/ui.orderful.com.har` by default; override with `$ORDERFUL_HAR_PATH`.
