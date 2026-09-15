@@ -1,0 +1,19 @@
+<restlet scriptid="customscript_orderful_render_packslip_rl">
+  <description>Renders a packing slip PDF for a given Item Fulfillment and Advanced PDF template. Read-only; used to iterate a partner packing slip template against real data.</description>
+  <isinactive>F</isinactive>
+  <name>Orderful | Render Packing Slip</name>
+  <notifyadmins>F</notifyadmins>
+  <notifyowner>T</notifyowner>
+  <scriptfile>[/SuiteScripts/orderful-packing-slip/orderful_renderPackingSlip_RL.js]</scriptfile>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_orderful_render_packslip_rl">
+      <allemployees>F</allemployees>
+      <allpartners>F</allpartners>
+      <allroles>T</allroles>
+      <isdeployed>T</isdeployed>
+      <loglevel>DEBUG</loglevel>
+      <status>RELEASED</status>
+      <title>Orderful | Render Packing Slip</title>
+    </scriptdeployment>
+  </scriptdeployments>
+</restlet>
