@@ -14,7 +14,7 @@ jobs:
             github.event.label.name == 'claude-review' &&
             github.event.pull_request.draft == false &&
             !endsWith(github.event.pull_request.user.login, '[bot]')
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-26.04
         permissions:
             contents: read
             pull-requests: write
@@ -56,7 +56,7 @@ jobs:
     review:
         needs: gate
         if: needs.gate.outputs.ok == 'true'
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-26.04
         timeout-minutes: 30
         permissions:
             contents: read
@@ -106,7 +106,7 @@ jobs:
                   echo "Stripped all PR-controlled Claude config paths from pr-head."
 
             - name: Run Claude Code Review
-              uses: anthropics/claude-code-action@56cf60fde42f7b19c3abfd5c9c48b69a1288461f # v1.0.222
+              uses: anthropics/claude-code-action@4036a180cf690f49529f5d8c79c998855287f590 # v1.0.230
               env:
                   PR_NUMBER: ${{ github.event.pull_request.number }}
                   REPO: ${{ github.repository }}
@@ -166,7 +166,7 @@ jobs:
     submit-verdict:
         needs: review
         if: needs.review.result == 'success'
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-26.04
         # No GITHUB_TOKEN grants: this job authenticates as the orderful-bot PAT and never
         # runs untrusted PR-head code (no checkout), so the PAT stays out of the reviewer
         # agent's sandbox. orderful-bot is a repo admin, so ORDERFUL_BOT_GITHUB_TOKEN MUST

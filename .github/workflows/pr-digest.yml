@@ -13,7 +13,7 @@ permissions:
 jobs:
   digest:
     name: Build and post PR digest
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Build and post digest
         env:
