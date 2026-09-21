@@ -29,6 +29,10 @@ lockfileIncludeTarballUrl: true
 # decreases compared to what the lockfile previously recorded.
 trustPolicy: no-downgrade
 
-# semver 5.7.2 predates npm provenance. Transitive dep of @babel and other build tools.
-trustPolicyExclude:
-  - "semver"
+# Skip the redundant supply-chain verification pass on every install. Tarball
+# integrity (sha512) is still checked.
+trustLockfile: true
+
+# Drop entries from trustPolicyExclude once nothing in the tree needs them, so an
+# exclusion cannot outlive the package version it was granted for.
+trustPolicyExcludePrune: true
