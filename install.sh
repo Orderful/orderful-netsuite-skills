@@ -58,7 +58,7 @@ fi
 header "Installing pnpm dependencies (oauth-1.0a, dotenv)"
 
 if ! command -v pnpm >/dev/null 2>&1; then
-  err "pnpm not found — install pnpm 11 (e.g. \`corepack enable pnpm\` on Node 24+) and re-run"
+  err "pnpm not found — install pnpm 12 (e.g. \`corepack enable pnpm\` on Node 24+) and re-run"
   info "  See https://pnpm.io/installation for alternatives"
   info "  Skills are linked but samples/ and the setup validation script won't work without pnpm install"
   exit 1

@@ -32,7 +32,7 @@ This repo is public and Apache 2.0 licensed. There is nothing to request and no 
    - macOS / Linux (nvm): `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash && nvm install --lts`
    - Windows: download the LTS installer from [nodejs.org](https://nodejs.org/)
    - Verify with `node --version` (should print `v24.x` or higher).
-3. Install **pnpm 11** — used to install the validation script's dependencies.
+3. Install **pnpm 12** — used to install the validation script's dependencies.
    - Easiest path (ships with Node 24): `corepack enable pnpm`
    - See [pnpm.io/installation](https://pnpm.io/installation) for alternatives.
    - Verify with `pnpm --version` (should print `11.x`).
