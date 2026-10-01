@@ -167,8 +167,8 @@ importers:
   .:
     dependencies:
       dotenv:
-        specifier: 18.0.0
-        version: 18.0.0
+        specifier: 18.0.3
+        version: 18.0.3
       oauth-1.0a:
         specifier: 2.2.6
         version: 2.2.6
@@ -311,8 +311,8 @@ packages:
   deep-is@0.1.4:
     resolution: {integrity: sha512-oIPzksmTg4/MriiaYGO+okXDT7ztn/w3Eptv/+gSIdMdKsJo0u4CfYNFJPy+4SKMuCqGw2wxnA+URMg3t8a/bQ==, tarball: https://registry.npmjs.org/deep-is/-/deep-is-0.1.4.tgz}
 
-  dotenv@18.0.0:
-    resolution: {integrity: sha512-16YSUvsKtKbwrTbESvtTSZzzJUug6jdFdqiBFg9Q6Bk1JY9r0hAtrtTiWxdI9YrsgOTmkjZRdgU0n3LnwGpECw==, tarball: https://registry.npmjs.org/dotenv/-/dotenv-18.0.0.tgz}
+  dotenv@18.0.3:
+    resolution: {integrity: sha512-/8CJTyL817qPnfbQrJgOEcrU3fDrJkRIoXBE566wHuvIXKOCHUZhPqGPbCPi9SogjdGnreF0TlvnTgK6J/8zpA==, tarball: https://registry.npmjs.org/dotenv/-/dotenv-18.0.3.tgz}
     engines: {node: '>=12'}
     hasBin: true
 
@@ -634,7 +634,7 @@ snapshots:
 
   deep-is@0.1.4: {}
 
-  dotenv@18.0.0: {}
+  dotenv@18.0.3: {}
 
   escape-string-regexp@4.0.0: {}
 
