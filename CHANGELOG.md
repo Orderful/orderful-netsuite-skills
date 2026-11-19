@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `945-fulfillment-debugging`: decoder row and Step 2a for `exceeding the N remaining to fulfill`. The connector fulfills up to NetSuite's default fulfillment quantity, and you can validate that in the UI (e.g. the *Default Items to Zero Received/Fulfilled* preference).
 - Initial public release.
 
 <!-- Example entries:

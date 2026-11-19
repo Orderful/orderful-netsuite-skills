@@ -101,10 +101,35 @@ decode via the symptom table below before assuming what's wrong.
 | Item Fulfillment has lines the 945 never shipped; the 810 bills them | The reconciliation step kept the NetSuite default (full ship) for a line the 945 didn't confirm | Compare the 945, the Sales Order, and the Item Fulfillment line-by-line (Step 4) |
 | `Item <id> not found in itemFulfillment` | A line the 945 says shipped wasn't eligible to be fulfilled in NetSuite's eyes | Check whether that item is marked fulfillable on the item record |
 | `Fulfillment quantity N is greater than expectation quantity M` | The shipped quantity got matched to the **wrong** Sales Order line (or it's a genuine over-ship from the warehouse) | Check the identifiers the 945 used to match the line (Step 3) |
+| `945 reported N for line item X, exceeding the M remaining to fulfill on the order` | The 945 shipped more than NetSuite's **default** fulfillment quantity for that line. M is often 0 even when the Sales Order line has plenty open | Open a fulfillment from the order in the UI and look at the default quantity (Step 2a) |
 | `You must enter at least one line item for this transaction` | After reconciliation, **zero** lines ended up selected — nothing on the 945 resolved to a Sales Order line | Check the 945's line identifiers against the Sales Order (Step 3) |
 | `Multiple sales orders found for purchase order number: PO…` | There's more than one Sales Order for that PO number | This is almost always duplicate/bad order data, not a connector bug (Step 6) |
 | Orderful Transaction status `Stale - Max Retries Exceeded` | Processing errored on every retry and gave up | Find the underlying error in `scriptnote` — decode via the rows above |
 | Orderful Transaction status `Success` but the Item Fulfillment is wrong | It processed without error, but produced the wrong result | Compare the 945 vs. Item Fulfillment (Step 4); escalate with that evidence |
+
+### Step 2a — The connector fulfills up to NetSuite's default quantity
+
+When it applies a 945, the connector creates the Item Fulfillment from the
+Sales Order (or Transfer Order) the same way the **Fulfill** button does. It
+fulfills each line **up to the quantity NetSuite defaults on that
+fulfillment line**. If NetSuite defaults a line to 0, the 945 can't fulfill
+it, and you get `exceeding the 0 remaining to fulfill`. This happens even when
+the order line shows quantity remaining, committed, and in stock.
+
+**Validate it in the UI:** open the Sales Order or Transfer Order, click
+**Fulfill**, and look at the item lines *before touching anything*. What
+NetSuite shows there is what the connector sees.
+
+| What the new fulfillment shows | Likely cause | Fix |
+|---|---|---|
+| **Fulfill** unchecked and **Quantity** blank, while **Remaining** shows the open qty | Accounting preference **Default Items to Zero Received/Fulfilled** is on (Setup > Accounting > Accounting Preferences > Order Management) | Uncheck the preference, then reprocess the Orderful Transaction. It also affects Item Receipts, so confirm with the customer before changing it |
+| Quantity defaults to less than the 945 shipped, and on hand at the line's location is short | Not enough stock at the order line's location | Correct inventory at that location (see `adjust-inventory`), then reprocess |
+| Line is missing from the fulfillment entirely | Line isn't fulfillable (closed, fully shipped, or a non-fulfillable item) | Check the order line and the item's fulfillable flag |
+
+Commitment settings ("Do Not Commit" vs "Available Qty") and NetSuite WMS
+location flags are **not** the usual cause of this error. In the case that
+prompted this section, changing both made no difference. Check the default
+fulfillment quantity first.
 
 ### Step 3 — Understand how a shipped line gets matched to a Sales Order line
 
