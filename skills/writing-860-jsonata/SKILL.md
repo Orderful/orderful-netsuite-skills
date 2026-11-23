@@ -102,8 +102,8 @@ Machine-readable: [`860.bdo.schema.json`](./860.bdo.schema.json) (JSON Schema dr
 
 | Field | Read? | Effect |
 | --- | --- | --- |
-| `transaction.purchaseOrderNumber` | **Yes** | Finds the parent 850 (exact string match on the Orderful Transaction PO number). Zero or several matches = fatal. |
-| `transaction.orderDate`, `requestedShipDate`, `startDate`, `endDate`, `earliestDelivery`, `latestDelivery` | **Yes** | Each non-null value is a header date change on every targeted Sales Order. Refused as a whole when Allow Date Changes is off. |
+| `transaction.purchaseOrderNumber` | **Yes** | Finds the parent 850 (exact string match on the Orderful Transaction PO number). Zero or several matches = fatal — and the search does **not** filter on `isinactive`, so inactive duplicate 850 records still count (see [Debugging](#debugging)). |
+| `transaction.orderDate`, `requestedShipDate`, `startDate`, `endDate`, `earliestDelivery`, `latestDelivery` | **Yes** | Each non-null value is a header date change on every targeted Sales Order. Refused as a whole when Allow Date Changes is off — **even when the value equals the date already on the order**; partners that echo the unchanged PO date on every change request trip the gate (example below). |
 | `transaction.userDefinedFields` / `transaction._textFields` | **Yes** | `setValue` / `setText` on every Sales Order the 860 touches, just before save. `null` values are skipped. |
 | `transactionLines[].changeCode` | **Yes** | Selects the change type(s) — table below. Unknown code = line error. |
 | `transactionLines[].quantity1` | **Yes** | New quantity for quantity changes and additions, when no store distribution supplies one. |
@@ -292,6 +292,23 @@ $defaultValues ~> | transaction | {
 )
 ```
 
+### Partner echoes unchanged dates and trips the date gate
+
+The date gate fires on any non-null header date — it does not compare against the Sales Order, so a BCH/DTM date identical to what is already on the order is still "a date change". Partners routinely echo the original PO date on change requests that only touch quantities; with Allow Date Changes off, every such 860 is refused ("Allow date change setting is false - order date change is not allowed for sales order …"). If date changes are genuinely out of scope for this partner, blank the echoed dates instead of flipping the setting:
+
+```jsonata
+$defaultValues ~> | transaction | {
+  "orderDate": null,
+  "requestedShipDate": null,
+  "startDate": null,
+  "endDate": null,
+  "earliestDelivery": null,
+  "latestDelivery": null
+} |
+```
+
+If the partner *does* legitimately send date changes, this is a settings conversation instead — see [`settings-architecture.md`](../../reference/settings-architecture.md) for the allowDateChanges chain (ETT override select → per-860 subsidiary default; note the migration seeds the subsidiary default to `false`, which shadows the legacy ETT boolean).
+
 ### Advanced: target one Sales Order of a split PO without SDQ
 
 When the 850 was split into one Sales Order per ship-to and the 860 carries no SDQ, a quantity change cannot be allocated and fails. If the N1*ST identifies the store, synthesise a distribution so the change lands on that order only:
@@ -342,6 +359,7 @@ WHERE custrecord_ord_tran_orderful_id = '<orderful-transaction-id>'
 - **Mapped Split Data** (`custrecord_orderful_mapped_split_bdos`) is the resolved change set. Look at `lineChanges[].itemId`, `.lineUniqueKey`, `.salesOrderId`, `.changeType` and `errors`.
 - Errors are child records of type `customrecord_orderful_transaction_error`; the Orderful Transaction record's Errors tab shows them.
 - "Error applying line change **for item null** … lineUniqueKey is required" = item-resolution failure wearing a line-key message.
+- "**multiple related 850 found** with purchase order number …" = more than one Orderful Transaction record carries that PO number (typically a duplicate test 850). The parent-850 lookup does **not** filter on `isinactive`, so inactivating the duplicate record changes nothing. Instead, retag the duplicate's PO-number field (`custrecord_orderful_po_number`, e.g. suffix `_DUPRETIRED`) so exactly one active-value match remains, then reprocess the 860.
 - Execution log titles worth searching (via [`which-script-ran`](../which-script-ran/SKILL.md)): `Native JSONata mapper` (did an override run), `bdoToChangeSet: itemLookupData` (what the resolver had to work with), `mapLineChange: matchingLineItem` (the Sales Order line it picked), `bdoToChangeSet: change refused, order closed to change`.
 
 ## Differences from the 850 mapping
